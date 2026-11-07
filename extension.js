@@ -6,6 +6,8 @@
  * from the user's active Linux icon theme.
  */
 
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -80,10 +82,59 @@ export default class PwaIconMatcherExtension extends Extension {
         if (isMasterEnabled) {
             this._fileMonitor.start(true);
         }
+
+        // Automatic re-sync and fallback on system icon theme change
+        this._interfaceSettings = null;
+        this._interfaceSignalId = 0;
+        this._themeChangeDebounceId = 0;
+
+        try {
+            this._interfaceSettings = new Gio.Settings({ schema_id: 'org.gnome.desktop.interface' });
+            this._interfaceSignalId = this._interfaceSettings.connect('changed::icon-theme', () => {
+                logger.info('System icon theme changed; scheduling automatic PWA launcher resync and fallback check');
+
+                if (this._themeChangeDebounceId > 0) {
+                    GLib.Source.remove(this._themeChangeDebounceId);
+                    this._themeChangeDebounceId = 0;
+                }
+
+                this._themeChangeDebounceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 400, () => {
+                    this._themeChangeDebounceId = 0;
+                    if (!this._fileMonitor || !this._fileMonitor.isRunning()) {
+                        return GLib.SOURCE_REMOVE;
+                    }
+
+                    // Rescan icon theme caches and update grid
+                    this._refreshAppGrid(null);
+
+                    // Re-evaluate all launchers: match newly available icons or trigger fallback
+                    this._fileMonitor.resyncAllLaunchers().catch(err => {
+                        logger.error('Error during theme switch resync', err);
+                    });
+
+                    return GLib.SOURCE_REMOVE;
+                });
+            });
+        } catch (err) {
+            logger.debug('Could not bind icon-theme listener: ' + err.message);
+        }
     }
 
     disable() {
         logger.info('Disabling PWA Icon Matcher extension');
+
+        // Cancel theme change debounce timer
+        if (this._themeChangeDebounceId > 0) {
+            GLib.Source.remove(this._themeChangeDebounceId);
+            this._themeChangeDebounceId = 0;
+        }
+
+        // Disconnect theme settings signal
+        if (this._interfaceSettings && this._interfaceSignalId) {
+            this._interfaceSettings.disconnect(this._interfaceSignalId);
+            this._interfaceSignalId = 0;
+            this._interfaceSettings = null;
+        }
 
         // Stop file monitor and cancel debounces/timers
         if (this._fileMonitor) {

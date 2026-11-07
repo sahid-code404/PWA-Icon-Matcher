@@ -643,6 +643,74 @@ Icon=my-favorite-custom-icon
             cleanupDir(tmpState);
         }
     }
+
+    // =========================================================================
+    // Test 15: Automatic fallback when active theme lacks matching icon
+    // =========================================================================
+    console.log('\n[Test 15] Automatic fallback on theme change');
+    {
+        const tmpApps = GLib.dir_make_tmp('pwa-test15-XXXXXX');
+        const tmpState = GLib.dir_make_tmp('pwa-state15-XXXXXX');
+        try {
+            const filePath = GLib.build_filenamev([tmpApps, 'brave-claude-Default.desktop']);
+            const origIcon = '/home/user/.local/share/icons/hicolor/512x512/apps/brave-claude.png';
+            const rawContent = `[Desktop Entry]
+Type=Application
+Name=Claude
+Exec=/usr/bin/brave --app-id=claude123
+Icon=${origIcon}
+StartupWMClass=crx_claude123
+`;
+            const f = Gio.File.new_for_path(filePath);
+            f.replace_contents(new TextEncoder().encode(rawContent), null, false, Gio.FileCreateFlags.NONE, null);
+
+            // Theme A (has 'claude')
+            const themeA = { has_icon: (name) => name === 'claude' };
+            const stateMgr = new StateManager(tmpState);
+            const fileWriter = new FileWriter([tmpApps]);
+
+            const matcherA = new IconMatcher({
+                resolver: new IconResolver(themeA),
+                stateManager: stateMgr,
+                fileWriter: fileWriter,
+                applicationsDir: tmpApps
+            });
+
+            // Match in Theme A
+            const resA = await matcherA.processDesktopFile(filePath);
+            assert.ok(resA.modified, 'Launcher matched in Theme A');
+            assert.equal(resA.matchedIcon, 'claude', 'Matched icon is claude');
+            assert.ok(stateMgr.hasEntry('brave-claude-Default.desktop'), 'State recorded in Theme A');
+
+            // Switch to Theme B (does NOT have 'claude')
+            const themeB = { has_icon: () => false };
+            const matcherB = new IconMatcher({
+                resolver: new IconResolver(themeB),
+                stateManager: stateMgr,
+                fileWriter: fileWriter,
+                applicationsDir: tmpApps
+            });
+
+            // Re-evaluate in Theme B -> triggers automatic fallback!
+            const resB = await matcherB.processDesktopFile(filePath);
+            assert.ok(resB.modified, 'Launcher modified during fallback');
+            assert.equal(resB.reason, 'fallback-to-original', 'Reason correctly reports fallback-to-original');
+
+            const [ok, bytes] = f.load_contents(null);
+            const content = new TextDecoder('utf-8').decode(bytes);
+            assert.ok(content.includes(`Icon=${origIcon}`), 'File restored to original browser icon');
+            assert.ok(!stateMgr.hasEntry('brave-claude-Default.desktop'), 'State cleared after fallback');
+
+            // Switch BACK to Theme A -> re-matches!
+            const resC = await matcherA.processDesktopFile(filePath);
+            assert.ok(resC.modified, 'Launcher re-matches when switching back to Theme A');
+            assert.equal(resC.matchedIcon, 'claude', 'Re-applied theme icon');
+            assert.ok(stateMgr.hasEntry('brave-claude-Default.desktop'), 'State recorded again');
+        } finally {
+            cleanupDir(tmpApps);
+            cleanupDir(tmpState);
+        }
+    }
 }
 
 function cleanupDir(dirPath) {
