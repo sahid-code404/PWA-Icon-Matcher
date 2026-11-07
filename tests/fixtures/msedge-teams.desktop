@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Terminal=false
+Type=Application
+Name=Microsoft Teams
+Exec=/opt/microsoft/msedge/microsoft-edge --profile-directory=Default --app-id=cgeadknapnnfllhkkhacmkchgcmigbde
+Icon=/home/user/.local/share/icons/hicolor/256x256/apps/msedge-cgeadknapnnfllhkkhacmkchgcmigbde-Default.png
+StartupWMClass=crx_cgeadknapnnfllhkkhacmkchgcmigbde

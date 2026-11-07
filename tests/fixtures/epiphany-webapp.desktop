@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Name=Discourse Forum
+Exec=epiphany --application-mode=/home/user/.local/share/epiphany/webapps/discourse_1234
+Icon=/home/user/.local/share/epiphany/webapps/discourse_1234/app-icon.png
+StartupWMClass=org.gnome.Epiphany.WebApp-discourse_1234
+Type=Application
+Categories=GNOME;GTK;Network;WebBrowser;
+X-Purism-FormFactor=Workstation;Mobile;

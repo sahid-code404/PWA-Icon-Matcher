@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Name=Mastodon
+Exec=firefoxpwa site run 01HQ5678ABCD
+Icon=/home/user/.local/share/firefoxpwa/sites/01HQ5678ABCD/icon.png
+StartupWMClass=FFPWA-01HQ5678ABCD
+Type=Application
+Categories=Network;

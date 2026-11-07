@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Terminal=false
+Type=Application
+Name=ObscureInternalServiceXYZ99
+Exec=/usr/bin/brave-browser --profile-directory=Default --app-id=xyzobscureapp9999999999999999999
+Icon=/home/user/.local/share/icons/hicolor/256x256/apps/brave-xyzobscureapp9999999999999999999-Default.png
+StartupWMClass=crx_xyzobscureapp9999999999999999999

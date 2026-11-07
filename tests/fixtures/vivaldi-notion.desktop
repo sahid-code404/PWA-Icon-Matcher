@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Terminal=false
+Type=Application
+Name=Notion
+Exec=/usr/bin/vivaldi-stable --profile-directory=Default --app-id=bhehhkgiafopldgnofckbijnkcfkdfgd
+Icon=/home/user/.local/share/icons/hicolor/256x256/apps/vivaldi-bhehhkgiafopldgnofckbijnkcfkdfgd-Default.png
+StartupWMClass=crx_bhehhkgiafopldgnofckbijnkcfkdfgd

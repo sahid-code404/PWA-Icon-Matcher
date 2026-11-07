@@ -1,0 +1,13 @@
+{
+  "uuid": "pwa-icon-matcher@pwa-icon-matcher",
+  "name": "PWA Icon Matcher",
+  "description": "Automatically match browser-installed PWA launcher icons with your active icon theme.",
+  "version": 1,
+  "shell-version": [
+    "49",
+    "50",
+    "51"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.pwa-icon-matcher",
+  "url": "https://github.com/shaque/pwa-icon-matcher"
+}

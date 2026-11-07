@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="pwa-icon-matcher">
+  <schema id="org.gnome.shell.extensions.pwa-icon-matcher" path="/org/gnome/shell/extensions/pwa-icon-matcher/">
+    <key name="enabled" type="b">
+      <default>true</default>
+      <summary>Enable PWA Icon Matcher</summary>
+      <description>Master switch to enable or disable automatic PWA icon matching.</description>
+    </key>
+    <key name="auto-match-new" type="b">
+      <default>true</default>
+      <summary>Automatically match newly installed PWAs</summary>
+      <description>Monitor applications directory and match icons when new PWAs are installed.</description>
+    </key>
+    <key name="startup-scan" type="b">
+      <default>true</default>
+      <summary>Scan existing PWA launchers at startup</summary>
+      <description>Perform a single asynchronous pass over existing launchers on startup.</description>
+    </key>
+    <key name="browser-independent" type="b">
+      <default>true</default>
+      <summary>Enable browser-independent detection</summary>
+      <description>Use modular adapters to detect PWAs across all supported browsers.</description>
+    </key>
+    <key name="exact-matching" type="b">
+      <default>true</default>
+      <summary>Exact matching only</summary>
+      <description>Require exact normalized match with the active theme to avoid unsafe fuzzy guesses.</description>
+    </key>
+    <key name="browser-brave" type="b">
+      <default>true</default>
+      <summary>Enable Brave adapter</summary>
+      <description>Detect PWAs installed using Brave Browser.</description>
+    </key>
+    <key name="browser-chrome" type="b">
+      <default>true</default>
+      <summary>Enable Google Chrome adapter</summary>
+      <description>Detect PWAs installed using Google Chrome.</description>
+    </key>
+    <key name="browser-chromium" type="b">
+      <default>true</default>
+      <summary>Enable Chromium adapter</summary>
+      <description>Detect PWAs installed using Chromium or Ungoogled Chromium.</description>
+    </key>
+    <key name="browser-edge" type="b">
+      <default>true</default>
+      <summary>Enable Microsoft Edge adapter</summary>
+      <description>Detect PWAs installed using Microsoft Edge.</description>
+    </key>
+    <key name="browser-vivaldi" type="b">
+      <default>true</default>
+      <summary>Enable Vivaldi adapter</summary>
+      <description>Detect PWAs installed using Vivaldi.</description>
+    </key>
+    <key name="browser-opera" type="b">
+      <default>true</default>
+      <summary>Enable Opera adapter</summary>
+      <description>Detect PWAs installed using Opera.</description>
+    </key>
+    <key name="browser-firefox-pwa" type="b">
+      <default>true</default>
+      <summary>Enable Firefox PWA adapter</summary>
+      <description>Detect PWAs installed using PWAsForFirefox (firefoxpwa).</description>
+    </key>
+    <key name="browser-epiphany" type="b">
+      <default>true</default>
+      <summary>Enable GNOME Web (Epiphany) adapter</summary>
+      <description>Detect Web Apps installed using GNOME Web / Epiphany.</description>
+    </key>
+    <key name="browser-generic" type="b">
+      <default>true</default>
+      <summary>Enable Generic PWA adapter</summary>
+      <description>Detect PWAs with unambiguous PWA argument markers from other browsers.</description>
+    </key>
+    <key name="custom-aliases" type="a{ss}">
+      <default>{}</default>
+      <summary>Custom icon aliases</summary>
+      <description>Dictionary mapping application names to specific icon theme names.</description>
+    </key>
+    <key name="excluded-apps" type="as">
+      <default>[]</default>
+      <summary>User-defined exclusions</summary>
+      <description>List of application names or desktop filenames to exclude from automatic modification.</description>
+    </key>
+    <key name="debug-logging" type="b">
+      <default>false</default>
+      <summary>Diagnostic debug logging</summary>
+      <description>Enable lightweight diagnostic log messages in system journal and preferences.</description>
+    </key>
+  </schema>
+</schemalist>
