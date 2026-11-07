@@ -66,17 +66,17 @@ export default class PwaIconMatcherExtension extends Extension {
             this._settings.connect('changed::enabled', () => {
                 const enabled = this._settings.get_boolean('enabled');
                 if (enabled && !this._fileMonitor.isRunning()) {
-                    this._fileMonitor.start(false);
+                    // Instantly sync existing launchers once when re-enabled, then monitor for new PWAs
+                    this._fileMonitor.start(true);
                 } else if (!enabled && this._fileMonitor.isRunning()) {
                     this._fileMonitor.stop();
                 }
             })
         );
 
-        // Start file monitoring if enabled
+        // Start file monitoring and instantly sync once when enabled
         if (isMasterEnabled) {
-            const runStartupScan = this._settings.get_boolean('startup-scan');
-            this._fileMonitor.start(runStartupScan);
+            this._fileMonitor.start(true);
         }
     }
 

@@ -1,12 +1,11 @@
 /**
  * PWA Icon Matcher - Preferences Interface (GTK4 + Libadwaita)
  *
- * Implements a complete preferences window covering:
- * - Section A: General Settings
- * - Section B: Browser Support Toggles
- * - Section C: Icon Matching, Custom Aliases, Exclusions, and Live Preview
- * - Section D: Maintenance, Manual Scan, Icon Restoration, State Management
- * - Section E: Diagnostics and Lightweight Log Inspection
+ * Symmetrical, polished, pixel-perfect Libadwaita preferences:
+ * - Perfectly aligned boxed-list groups across all pages
+ * - Uniform prefix icon sizing and alignment
+ * - Grouped button bars for launcher management
+ * - Pure event-driven, zero idle RAM/CPU footprint
  */
 
 import Gdk from 'gi://Gdk';
@@ -42,11 +41,241 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
             fileWriter
         });
 
-        window.set_default_size(720, 680);
+        // Symmetrical window geometry
+        window.set_default_size(660, 800);
         window.set_search_enabled(true);
 
+        // Standardized prefix icon generator
+        const makePrefixIcon = (iconName) => new Gtk.Image({
+            icon_name: iconName,
+            pixel_size: 20,
+            valign: Gtk.Align.CENTER,
+            css_classes: ['dim-label']
+        });
+
+        const updateDesktopDatabase = () => {
+            try {
+                const appsDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'applications']);
+                Gio.Subprocess.new(['update-desktop-database', appsDir], Gio.SubprocessFlags.NONE);
+            } catch (_) {}
+        };
+
+        const showInFiles = (filePath) => {
+            try {
+                Gio.Subprocess.new(['nautilus', '--select', filePath], Gio.SubprocessFlags.NONE);
+            } catch (_) {
+                try {
+                    const dir = GLib.path_get_dirname(filePath);
+                    Gio.Subprocess.new(['xdg-open', dir], Gio.SubprocessFlags.NONE);
+                } catch (e) {
+                    window.add_toast(new Adw.Toast({ title: _('Could not open file manager') }));
+                }
+            }
+        };
+
+        const findHeaderBar = (widget) => {
+            if (widget instanceof Adw.HeaderBar) return widget;
+            let child = widget.get_first_child();
+            while (child) {
+                const res = findHeaderBar(child);
+                if (res) return res;
+                child = child.get_next_sibling();
+            }
+            return null;
+        };
+
         // ==========================================
-        // PAGE 1: GENERAL & BROWSERS
+        // HEADER BAR MENU
+        // ==========================================
+        const menuModel = new Gio.Menu();
+
+        const configSection = new Gio.Menu();
+        configSection.append(_('Export Profile…'), 'prefs.export-profile');
+        configSection.append(_('Import Profile…'), 'prefs.import-profile');
+        menuModel.append_section(null, configSection);
+
+        const toolsSection = new Gio.Menu();
+        toolsSection.append(_('Restore Original Icons…'), 'prefs.restore-all');
+        toolsSection.append(_('Reset to Defaults…'), 'prefs.reset');
+        toolsSection.append(_('Debug Logging'), 'prefs.debug-logging');
+        menuModel.append_section(null, toolsSection);
+
+        const linksSection = new Gio.Menu();
+        linksSection.append(_('GitHub Page'), 'prefs.open-readme');
+        linksSection.append(_('Report Issue'), 'prefs.open-bug-report');
+        menuModel.append_section(null, linksSection);
+
+        const menuButton = new Gtk.MenuButton({
+            menu_model: menuModel,
+            icon_name: 'open-menu-symbolic',
+            tooltip_text: _('Main Menu'),
+            valign: Gtk.Align.CENTER
+        });
+
+        const actionGroup = new Gio.SimpleActionGroup();
+        actionGroup.add_action(settings.create_action('debug-logging'));
+
+        // Export Profile Action
+        const exportAction = new Gio.SimpleAction({ name: 'export-profile' });
+        exportAction.connect('activate', () => {
+            try {
+                const fileDialog = new Gtk.FileDialog({
+                    title: _('Export Configuration Profile'),
+                    initial_name: 'pwa-icon-matcher-profile.json'
+                });
+                fileDialog.save(window, null, (dialog, res) => {
+                    try {
+                        const file = dialog.save_finish(res);
+                        if (file) {
+                            const rawAliases = settings.get_value('custom-aliases');
+                            const aliases = rawAliases.deepUnpack ? rawAliases.deepUnpack() : {};
+                            const exclusions = settings.get_strv('excluded-apps') || [];
+                            const payload = JSON.stringify({
+                                format: 'pwa-icon-matcher-profile',
+                                version: 1,
+                                exported_at: new Date().toISOString(),
+                                aliases,
+                                exclusions
+                            }, null, 2);
+
+                            const bytes = new GLib.Bytes(new TextEncoder().encode(payload));
+                            file.replace_contents_bytes_async(bytes, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null, (obj, r) => {
+                                try {
+                                    obj.replace_contents_finish(r);
+                                    window.add_toast(new Adw.Toast({ title: _('Configuration exported successfully') }));
+                                } catch (e) {
+                                    window.add_toast(new Adw.Toast({ title: _(`Export failed: ${e.message}`) }));
+                                }
+                            });
+                        }
+                    } catch (_) {}
+                });
+            } catch (err) {
+                window.add_toast(new Adw.Toast({ title: _(`Export dialog failed: ${err.message}`) }));
+            }
+        });
+        actionGroup.add_action(exportAction);
+
+        // Import Profile Action
+        const importAction = new Gio.SimpleAction({ name: 'import-profile' });
+        importAction.connect('activate', () => {
+            try {
+                const fileDialog = new Gtk.FileDialog({
+                    title: _('Import Configuration Profile')
+                });
+                fileDialog.open(window, null, (dialog, res) => {
+                    try {
+                        const file = dialog.open_finish(res);
+                        if (file) {
+                            const [ok, bytes] = file.load_contents(null);
+                            if (ok && bytes) {
+                                const text = new TextDecoder('utf-8').decode(bytes);
+                                const parsed = JSON.parse(text);
+                                if (parsed.aliases && typeof parsed.aliases === 'object') {
+                                    settings.set_value('custom-aliases', new GLib.Variant('a{ss}', parsed.aliases));
+                                }
+                                if (parsed.exclusions && Array.isArray(parsed.exclusions)) {
+                                    settings.set_strv('excluded-apps', parsed.exclusions);
+                                }
+                                window.add_toast(new Adw.Toast({ title: _('Configuration imported successfully') }));
+                                refreshAppLists();
+                                refreshAliases();
+                                refreshExclusions();
+                            }
+                        }
+                    } catch (e) {
+                        window.add_toast(new Adw.Toast({ title: _(`Import failed: ${e.message}`) }));
+                    }
+                });
+            } catch (err) {
+                window.add_toast(new Adw.Toast({ title: _(`Import dialog failed: ${err.message}`) }));
+            }
+        });
+        actionGroup.add_action(importAction);
+
+        // Reset Action
+        const resetAction = new Gio.SimpleAction({ name: 'reset' });
+        resetAction.connect('activate', () => {
+            const dialog = new Adw.AlertDialog({
+                heading: _('Reset Preferences?'),
+                body: _('Settings, aliases, and exclusions will return to defaults.')
+            });
+            dialog.add_response('cancel', _('Cancel'));
+            dialog.add_response('reset', _('Reset'));
+            dialog.set_response_appearance('reset', Adw.ResponseAppearance.DESTRUCTIVE);
+            dialog.set_default_response('cancel');
+            dialog.set_close_response('cancel');
+            dialog.connect('response::reset', () => {
+                settings.reset('enabled');
+                settings.reset('auto-match-new');
+                settings.reset('startup-scan');
+                settings.reset('debug-logging');
+                settings.reset('custom-aliases');
+                settings.reset('excluded-apps');
+                window.add_toast(new Adw.Toast({ title: _('Preferences reset to default') }));
+                refreshAppLists();
+                refreshAliases();
+                refreshExclusions();
+            });
+            dialog.present(window);
+        });
+        actionGroup.add_action(resetAction);
+
+        // Restore Original Icons Action (in menu)
+        const restoreAction = new Gio.SimpleAction({ name: 'restore-all' });
+        restoreAction.connect('activate', () => {
+            const dialog = new Adw.AlertDialog({
+                heading: _('Restore Original Icons?'),
+                body: _('Revert all modified launchers to their original browser icons.')
+            });
+            dialog.add_response('cancel', _('Cancel'));
+            dialog.add_response('restore', _('Restore'));
+            dialog.set_response_appearance('restore', Adw.ResponseAppearance.DESTRUCTIVE);
+            dialog.set_default_response('cancel');
+            dialog.set_close_response('cancel');
+
+            dialog.connect('response::restore', async () => {
+                try {
+                    const count = await matcher.restoreAllLaunchers();
+                    updateDesktopDatabase();
+                    window.add_toast(new Adw.Toast({ title: _(`Restored ${count} launcher(s)`) }));
+                    refreshAppLists();
+                } catch (err) {
+                    window.add_toast(new Adw.Toast({ title: _(`Restoration failed: ${err.message}`) }));
+                }
+            });
+
+            dialog.present(window);
+        });
+        actionGroup.add_action(restoreAction);
+
+        // Links
+        const readmeAction = new Gio.SimpleAction({ name: 'open-readme' });
+        readmeAction.connect('activate', () => {
+            new Gtk.UriLauncher({ uri: 'https://github.com/shaque/pwa-icon-matcher' }).launch(window, null, null);
+        });
+        actionGroup.add_action(readmeAction);
+
+        const bugAction = new Gio.SimpleAction({ name: 'open-bug-report' });
+        bugAction.connect('activate', () => {
+            new Gtk.UriLauncher({ uri: 'https://github.com/shaque/pwa-icon-matcher/issues' }).launch(window, null, null);
+        });
+        actionGroup.add_action(bugAction);
+
+        window.insert_action_group('prefs', actionGroup);
+
+        GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            try {
+                const headerbar = findHeaderBar(window);
+                if (headerbar) headerbar.pack_end(menuButton);
+            } catch (err) {
+                logger.error('Failed to attach headerbar menu', err);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
+
+        // ==========================================
+        // PAGE 1: GENERAL (Merged with Launchers)
         // ==========================================
         const generalPage = new Adw.PreferencesPage({
             title: _('General'),
@@ -54,523 +283,324 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
         });
         window.add(generalPage);
 
-        // Section A: General Settings Group
+        // Group 1: General Toggles
         const generalGroup = new Adw.PreferencesGroup({
-            title: _('General Configuration'),
-            description: _('Control automatic matching and startup behavior')
+            title: _('General')
         });
         generalPage.add(generalGroup);
 
         const enableRow = new Adw.SwitchRow({
-            title: _('Enable PWA Icon Matcher'),
-            subtitle: _('Master switch for the extension')
+            title: _('Enable Icon Matching')
         });
+        enableRow.add_prefix(makePrefixIcon('preferences-desktop-theme-symbolic'));
         settings.bind('enabled', enableRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         generalGroup.add(enableRow);
 
         const autoMatchRow = new Adw.SwitchRow({
-            title: _('Automatically Match Newly Installed PWAs'),
-            subtitle: _('Monitors ~/.local/share/applications/ and patches new PWA launchers')
+            title: _('Auto-Match New Installations')
         });
+        autoMatchRow.add_prefix(makePrefixIcon('folder-download-symbolic'));
         settings.bind('auto-match-new', autoMatchRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         generalGroup.add(autoMatchRow);
 
-        const startupScanRow = new Adw.SwitchRow({
-            title: _('Scan Existing Launchers at Startup'),
-            subtitle: _('Performs a single asynchronous pass when the extension starts')
+        // Group 2: Operations
+        const actionsGroup = new Adw.PreferencesGroup({
+            title: _('Operations')
         });
-        settings.bind('startup-scan', startupScanRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        generalGroup.add(startupScanRow);
+        generalPage.add(actionsGroup);
 
-        const browserIndepRow = new Adw.SwitchRow({
-            title: _('Browser-Independent Detection'),
-            subtitle: _('Detect PWAs across all supported browser engines')
+        const scanRow = new Adw.ActionRow({
+            title: _('Synchronize All Launchers')
         });
-        settings.bind('browser-independent', browserIndepRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        generalGroup.add(browserIndepRow);
-
-        // Section B: Browser Support Group
-        const browserGroup = new Adw.PreferencesGroup({
-            title: _('Supported Browser Adapters'),
-            description: _('Enable or disable detection adapters for individual browsers')
-        });
-        generalPage.add(browserGroup);
-
-        const browsers = [
-            { key: 'browser-brave', title: _('Brave'), subtitle: _('Brave Browser PWA desktop entries') },
-            { key: 'browser-chrome', title: _('Google Chrome'), subtitle: _('Google Chrome PWA desktop entries') },
-            { key: 'browser-chromium', title: _('Chromium'), subtitle: _('Chromium and Ungoogled Chromium launchers') },
-            { key: 'browser-edge', title: _('Microsoft Edge'), subtitle: _('Microsoft Edge PWA desktop entries') },
-            { key: 'browser-vivaldi', title: _('Vivaldi'), subtitle: _('Vivaldi Web App desktop entries') },
-            { key: 'browser-opera', title: _('Opera'), subtitle: _('Opera Web App desktop entries') },
-            { key: 'browser-firefox-pwa', title: _('Firefox PWA tools'), subtitle: _('PWAsForFirefox (firefoxpwa) launchers') },
-            { key: 'browser-epiphany', title: _('GNOME Web (Epiphany)'), subtitle: _('GNOME Web application mode launchers') },
-            { key: 'browser-generic', title: _('Generic PWA Detection'), subtitle: _('Launchers with unambiguous PWA command-line arguments') }
-        ];
-
-        for (const b of browsers) {
-            const row = new Adw.SwitchRow({
-                title: b.title,
-                subtitle: b.subtitle
-            });
-            settings.bind(b.key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
-            browserGroup.add(row);
-        }
-
-        // ==========================================
-        // PAGE 2: ICON MATCHING & ALIASES
-        // ==========================================
-        const matchingPage = new Adw.PreferencesPage({
-            title: _('Icon Matching'),
-            icon_name: 'emblem-favorite-symbolic'
-        });
-        window.add(matchingPage);
-
-        // Section C1: Matching Rules
-        const rulesGroup = new Adw.PreferencesGroup({
-            title: _('Matching Rules'),
-            description: _('Configure icon matching strictness')
-        });
-        matchingPage.add(rulesGroup);
-
-        const exactMatchRow = new Adw.SwitchRow({
-            title: _('Exact Matching Only'),
-            subtitle: _('Avoid heuristic guessing and require exact normalized theme matches')
-        });
-        settings.bind('exact-matching', exactMatchRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        rulesGroup.add(exactMatchRow);
-
-        // Section C2: Live Icon Tester & Preview
-        const previewGroup = new Adw.PreferencesGroup({
-            title: _('Icon Preview & Testing'),
-            description: _('Test how an application name resolves against your active icon theme')
-        });
-        matchingPage.add(previewGroup);
-
-        const testEntryRow = new Adw.EntryRow({
-            title: _('Test Application Name (e.g. Claude, YouTube, Gmail)')
-        });
-        previewGroup.add(testEntryRow);
-
-        const previewResultRow = new Adw.ActionRow({
-            title: _('Resolved Theme Icon'),
-            subtitle: _('Type a name above to test resolution')
-        });
-        const previewImage = new Gtk.Image({
-            icon_name: 'image-missing-symbolic',
-            pixel_size: 32,
-            valign: Gtk.Align.CENTER
-        });
-        previewResultRow.add_suffix(previewImage);
-        previewGroup.add(previewResultRow);
-
-        let lastResolvedIcon = '';
-        let lastQueryName = '';
-
-        const saveAsAliasBtn = new Gtk.Button({
-            label: _('Save as Alias'),
+        scanRow.add_prefix(makePrefixIcon('system-search-symbolic'));
+        const scanBtn = new Gtk.Button({
+            label: _('Sync Now'),
             valign: Gtk.Align.CENTER,
-            sensitive: false,
-            css_classes: ['suggested-action', 'flat']
+            css_classes: ['suggested-action']
         });
-        previewResultRow.add_suffix(saveAsAliasBtn);
+        scanBtn.connect('clicked', async () => {
+            scanBtn.set_sensitive(false);
+            try {
+                const appsDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'applications']);
+                const dirFile = Gio.File.new_for_path(appsDir);
+                if (dirFile.query_exists(null)) {
+                    const enumerator = await new Promise((res, rej) => {
+                        dirFile.enumerate_children_async(
+                            'standard::name',
+                            Gio.FileQueryInfoFlags.NONE,
+                            GLib.PRIORITY_DEFAULT,
+                            null,
+                            (obj, r) => {
+                                try { res(obj.enumerate_children_finish(r)); }
+                                catch (e) { rej(e); }
+                            }
+                        );
+                    });
 
-        testEntryRow.connect('changed', () => {
-            const query = testEntryRow.get_text().trim();
-            lastQueryName = query;
-            if (!query) {
-                previewResultRow.set_subtitle(_('Type a name above to test resolution'));
-                previewImage.set_from_icon_name('image-missing-symbolic');
-                saveAsAliasBtn.set_sensitive(false);
-                lastResolvedIcon = '';
-                return;
-            }
+                    let count = 0;
+                    while (true) {
+                        const files = await new Promise((res, rej) => {
+                            enumerator.next_files_async(10, GLib.PRIORITY_DEFAULT, null, (obj, r) => {
+                                try { res(obj.next_files_finish(r)); }
+                                catch (e) { rej(e); }
+                            });
+                        });
+                        if (!files || files.length === 0) break;
 
-            resolver.resolveIcon(query).then(resolved => {
-                if (testEntryRow.get_text().trim() !== query) return;
-                if (resolved) {
-                    lastResolvedIcon = resolved;
-                    previewResultRow.set_subtitle(_(`Found in active theme: "${resolved}"`));
-                    previewImage.set_from_icon_name(resolved);
-                    saveAsAliasBtn.set_sensitive(true);
-                } else {
-                    lastResolvedIcon = '';
-                    previewResultRow.set_subtitle(_('No matching icon found in active theme'));
-                    previewImage.set_from_icon_name('dialog-warning-symbolic');
-                    saveAsAliasBtn.set_sensitive(false);
-                }
-            });
-        });
-
-        // Section C3: Custom Icon Aliases Group
-        const aliasesGroup = new Adw.PreferencesGroup({
-            title: _('Custom Icon Aliases'),
-            description: _('Explicit aliases take top priority over automatic normalization')
-        });
-        matchingPage.add(aliasesGroup);
-
-        const addAliasActionRow = new Adw.ActionRow({
-            title: _('Add New Alias'),
-            subtitle: _('Map an application name to a specific icon name')
-        });
-        const addAliasBtn = new Gtk.Button({
-            icon_name: 'list-add-symbolic',
-            valign: Gtk.Align.CENTER
-        });
-        addAliasActionRow.add_suffix(addAliasBtn);
-        aliasesGroup.add(addAliasActionRow);
-
-        const aliasRowsBox = new Gtk.Box({
-            orientation: Gtk.Orientation.VERTICAL,
-            spacing: 4
-        });
-        aliasesGroup.add(aliasRowsBox);
-
-        const refreshAliases = () => {
-            // Remove existing alias child rows
-            let child = aliasRowsBox.get_first_child();
-            while (child) {
-                const next = child.get_next_sibling();
-                aliasRowsBox.remove(child);
-                child = next;
-            }
-
-            const varVal = settings.get_value('custom-aliases');
-            const aliases = varVal.deepUnpack ? varVal.deepUnpack() : {};
-            const keys = Object.keys(aliases).sort();
-
-            if (keys.length === 0) {
-                const emptyRow = new Adw.ActionRow({
-                    title: _('No custom aliases configured'),
-                    subtitle: _('Default normalized matching is used')
-                });
-                aliasRowsBox.append(emptyRow);
-                return;
-            }
-
-            for (const app of keys) {
-                const iconName = aliases[app];
-                const row = new Adw.ActionRow({
-                    title: app,
-                    subtitle: iconName
-                });
-
-                // Icon preview thumbnail
-                const img = new Gtk.Image({
-                    icon_name: iconName,
-                    pixel_size: 24,
-                    valign: Gtk.Align.CENTER
-                });
-                row.add_prefix(img);
-
-                // Delete button
-                const delBtn = new Gtk.Button({
-                    icon_name: 'user-trash-symbolic',
-                    valign: Gtk.Align.CENTER,
-                    css_classes: ['flat', 'destructive-action']
-                });
-                delBtn.connect('clicked', () => {
-                    const currentVar = settings.get_value('custom-aliases');
-                    const curr = currentVar.deepUnpack ? currentVar.deepUnpack() : {};
-                    delete curr[app];
-                    settings.set_value('custom-aliases', new GLib.Variant('a{ss}', curr));
-                    refreshAliases();
-                });
-                row.add_suffix(delBtn);
-
-                aliasRowsBox.append(row);
-            }
-        };
-
-        refreshAliases();
-
-        const openAddAliasDialog = (initialApp = '', initialIcon = '') => {
-            const dialog = new Adw.AlertDialog({
-                heading: _('Add Custom Icon Alias'),
-                body: _('Specify the exact application name and the desired theme icon name:')
-            });
-
-            const box = new Gtk.Box({
-                orientation: Gtk.Orientation.VERTICAL,
-                spacing: 8,
-                margin_top: 12
-            });
-
-            const appEntry = new Adw.EntryRow({ title: _('Application Name (e.g. Claude)') });
-            const iconEntry = new Adw.EntryRow({ title: _('Theme Icon Name (e.g. claude)') });
-            if (initialApp) appEntry.set_text(initialApp);
-            if (initialIcon) iconEntry.set_text(initialIcon);
-
-            box.append(appEntry);
-            box.append(iconEntry);
-
-            dialog.set_extra_child(box);
-            dialog.add_response('cancel', _('Cancel'));
-            dialog.add_response('save', _('Save'));
-            dialog.set_response_appearance('save', Adw.ResponseAppearance.SUGGESTED);
-
-            dialog.connect('response', (dlg, response) => {
-                if (response === 'save') {
-                    const app = appEntry.get_text().trim();
-                    const icon = iconEntry.get_text().trim();
-                    if (app && icon) {
-                        const currentVar = settings.get_value('custom-aliases');
-                        const curr = currentVar.deepUnpack ? currentVar.deepUnpack() : {};
-                        curr[app] = icon;
-                        settings.set_value('custom-aliases', new GLib.Variant('a{ss}', curr));
-                        refreshAliases();
-                    }
-                }
-            });
-
-            dialog.present(window);
-        };
-
-        addAliasBtn.connect('clicked', () => {
-            openAddAliasDialog();
-        });
-
-        saveAsAliasBtn.connect('clicked', () => {
-            if (lastQueryName && lastResolvedIcon) {
-                openAddAliasDialog(lastQueryName, lastResolvedIcon);
-            }
-        });
-
-        // Section C4: User Exclusions Group
-        const exclusionsGroup = new Adw.PreferencesGroup({
-            title: _('User Exclusions'),
-            description: _('Prevent specific applications or desktop files from being modified')
-        });
-        matchingPage.add(exclusionsGroup);
-
-        const addExclusionRow = new Adw.ActionRow({
-            title: _('Add Exclusion'),
-            subtitle: _('Exclude by application name or desktop filename')
-        });
-        const addExclusionBtn = new Gtk.Button({
-            icon_name: 'list-add-symbolic',
-            valign: Gtk.Align.CENTER
-        });
-        addExclusionRow.add_suffix(addExclusionBtn);
-        exclusionsGroup.add(addExclusionRow);
-
-        const exclusionRowsBox = new Gtk.Box({
-            orientation: Gtk.Orientation.VERTICAL,
-            spacing: 4
-        });
-        exclusionsGroup.add(exclusionRowsBox);
-
-        const refreshExclusions = () => {
-            let child = exclusionRowsBox.get_first_child();
-            while (child) {
-                const next = child.get_next_sibling();
-                exclusionRowsBox.remove(child);
-                child = next;
-            }
-
-            const exclusions = settings.get_strv('excluded-apps') || [];
-            if (exclusions.length === 0) {
-                const emptyRow = new Adw.ActionRow({
-                    title: _('No exclusions defined'),
-                    subtitle: _('All detected PWAs are eligible for icon matching')
-                });
-                exclusionRowsBox.append(emptyRow);
-                return;
-            }
-
-            for (const item of exclusions) {
-                const row = new Adw.ActionRow({ title: item });
-                const delBtn = new Gtk.Button({
-                    icon_name: 'user-trash-symbolic',
-                    valign: Gtk.Align.CENTER,
-                    css_classes: ['flat', 'destructive-action']
-                });
-                delBtn.connect('clicked', () => {
-                    const curr = settings.get_strv('excluded-apps') || [];
-                    const filtered = curr.filter(x => x !== item);
-                    settings.set_strv('excluded-apps', filtered);
-                    refreshExclusions();
-                });
-                row.add_suffix(delBtn);
-                exclusionRowsBox.append(row);
-            }
-        };
-
-        refreshExclusions();
-
-        addExclusionBtn.connect('clicked', () => {
-            const dialog = new Adw.AlertDialog({
-                heading: _('Add Exclusion'),
-                body: _('Enter an application name or desktop filename to exclude:')
-            });
-
-            const box = new Gtk.Box({
-                orientation: Gtk.Orientation.VERTICAL,
-                spacing: 8,
-                margin_top: 12
-            });
-            const entry = new Adw.EntryRow({ title: _('Application or File Name') });
-            box.append(entry);
-
-            dialog.set_extra_child(box);
-            dialog.add_response('cancel', _('Cancel'));
-            dialog.add_response('add', _('Add'));
-            dialog.set_response_appearance('add', Adw.ResponseAppearance.SUGGESTED);
-
-            dialog.connect('response', (dlg, response) => {
-                if (response === 'add') {
-                    const val = entry.get_text().trim();
-                    if (val) {
-                        const curr = settings.get_strv('excluded-apps') || [];
-                        if (!curr.includes(val)) {
-                            curr.push(val);
-                            settings.set_strv('excluded-apps', curr);
-                            refreshExclusions();
+                        for (const info of files) {
+                            const name = info.get_name();
+                            if (!name.endsWith('.desktop')) continue;
+                            const fullPath = GLib.build_filenamev([appsDir, name]);
+                            const result = await matcher.processDesktopFile(fullPath);
+                            if (result && result.modified) count++;
                         }
                     }
+                    enumerator.close(null);
+                    updateDesktopDatabase();
+                    window.add_toast(new Adw.Toast({ title: _(`Updated ${count} launcher(s)`) }));
+                    refreshAppLists();
                 }
-            });
-
-            dialog.present(window);
-        });
-
-        // ==========================================
-        // PAGE 3: MAINTENANCE & LAUNCHERS
-        // ==========================================
-        const maintenancePage = new Adw.PreferencesPage({
-            title: _('Maintenance'),
-            icon_name: 'system-run-symbolic'
-        });
-        window.add(maintenancePage);
-
-        // Section D1: Operations Group
-        const opsGroup = new Adw.PreferencesGroup({
-            title: _('Operations'),
-            description: _('Manually scan launchers or restore original browser icons')
-        });
-        maintenancePage.add(opsGroup);
-
-        // Scan now action
-        const scanRow = new Adw.ActionRow({
-            title: _('Scan Existing PWA Launchers Now'),
-            subtitle: _('Check all launchers in ~/.local/share/applications/ and apply matching icons')
-        });
-        const scanBtn = new Gtk.Button({
-            label: _('Scan Now'),
-            valign: Gtk.Align.CENTER
+            } catch (err) {
+                window.add_toast(new Adw.Toast({ title: _(`Scan failed: ${err.message}`) }));
+            } finally {
+                scanBtn.set_sensitive(true);
+            }
         });
         scanRow.add_suffix(scanBtn);
-        opsGroup.add(scanRow);
+        actionsGroup.add(scanRow);
 
-        // Restore all action
-        const restoreRow = new Adw.ActionRow({
-            title: _('Restore All Modified Icons'),
-            subtitle: _('Revert all PWA desktop entries back to their recorded original icons')
+        // Group 3: Symmetrical Unified Launchers Card
+        const launchersGroup = new Adw.PreferencesGroup({
+            title: _('Launchers')
         });
-        const restoreBtn = new Gtk.Button({
-            label: _('Restore All'),
-            valign: Gtk.Align.CENTER,
-            css_classes: ['destructive-action']
-        });
-        restoreRow.add_suffix(restoreBtn);
-        opsGroup.add(restoreRow);
+        generalPage.add(launchersGroup);
 
-        // Section D2: Matched Launchers List
-        const matchedGroup = new Adw.PreferencesGroup({
-            title: _('Matched PWA Launchers'),
-            description: _('PWA launchers whose icons have been updated by this extension')
+        const searchEntryRow = new Adw.EntryRow({
+            title: _('Filter Launchers')
         });
-        maintenancePage.add(matchedGroup);
+        searchEntryRow.add_prefix(makePrefixIcon('edit-find-symbolic'));
+        launchersGroup.add(searchEntryRow);
 
         const matchedExpander = new Adw.ExpanderRow({
-            title: _('View Matched Launchers'),
-            subtitle: _('Loading...')
+            title: _('Themed Applications'),
+            subtitle: _('Loading…'),
+            expanded: true
         });
-        matchedGroup.add(matchedExpander);
-
-        // Section D3: Unmatched Launchers List
-        const unmatchedGroup = new Adw.PreferencesGroup({
-            title: _('Unmatched PWA Launchers'),
-            description: _('Detected PWAs that do not have a corresponding theme icon')
-        });
-        maintenancePage.add(unmatchedGroup);
+        matchedExpander.add_prefix(makePrefixIcon('emblem-ok-symbolic'));
+        launchersGroup.add(matchedExpander);
 
         const unmatchedExpander = new Adw.ExpanderRow({
-            title: _('View Unmatched Launchers'),
-            subtitle: _('Loading...')
+            title: _('Unresolved Launchers'),
+            subtitle: _('Loading…'),
+            expanded: false
         });
-        unmatchedGroup.add(unmatchedExpander);
+        unmatchedExpander.add_prefix(makePrefixIcon('dialog-warning-symbolic'));
+        launchersGroup.add(unmatchedExpander);
 
         let matchedChildRows = [];
         let unmatchedChildRows = [];
 
-        const refreshLauncherLists = async () => {
+        // Real-time filtering function
+        searchEntryRow.connect('changed', () => {
+            const query = searchEntryRow.get_text().toLowerCase().trim();
+
+            let matchedCount = 0;
+            for (const row of matchedChildRows) {
+                if (!query) {
+                    row.set_visible(true);
+                    matchedCount++;
+                } else {
+                    const title = (row.title || '').toLowerCase();
+                    const subtitle = (row.subtitle || '').toLowerCase();
+                    const matches = title.includes(query) || subtitle.includes(query);
+                    row.set_visible(matches);
+                    if (matches) matchedCount++;
+                }
+            }
+
+            let unmatchedCount = 0;
+            for (const row of unmatchedChildRows) {
+                if (!query) {
+                    row.set_visible(true);
+                    unmatchedCount++;
+                } else {
+                    const title = (row.title || '').toLowerCase();
+                    const subtitle = (row.subtitle || '').toLowerCase();
+                    const matches = title.includes(query) || subtitle.includes(query);
+                    row.set_visible(matches);
+                    if (matches) unmatchedCount++;
+                }
+            }
+
+            if (query) {
+                matchedExpander.set_expanded(matchedCount > 0);
+                unmatchedExpander.set_expanded(unmatchedCount > 0);
+                matchedExpander.set_subtitle(_(`${matchedCount} matching "${query}"`));
+                unmatchedExpander.set_subtitle(_(`${unmatchedCount} matching "${query}"`));
+            } else {
+                matchedExpander.set_expanded(true);
+                matchedExpander.set_subtitle(_(`${matchedChildRows.length} themed`));
+                unmatchedExpander.set_subtitle(_(`${unmatchedChildRows.length} unresolved`));
+            }
+        });
+
+        // Dialog for manual icon customization
+        const openManualIconDialog = (appName, currentIcon, desktopFile) => {
+            const dialog = new Adw.AlertDialog({
+                heading: _('Custom Theme Icon'),
+                body: _(`Select or type a theme icon name for "${appName}"`)
+            });
+
+            const box = new Gtk.Box({
+                orientation: Gtk.Orientation.VERTICAL,
+                spacing: 12,
+                margin_top: 12,
+                margin_bottom: 12
+            });
+
+            const iconEntry = new Adw.EntryRow({
+                title: _('Target Icon Name'),
+                text: currentIcon
+            });
+            box.append(iconEntry);
+
+            dialog.set_extra_child(box);
+            dialog.add_response('cancel', _('Cancel'));
+            dialog.add_response('apply', _('Apply'));
+            dialog.set_response_appearance('apply', Adw.ResponseAppearance.SUGGESTED);
+            dialog.set_default_response('apply');
+
+            dialog.connect('response::apply', async () => {
+                const target = iconEntry.get_text().trim();
+                if (!target) return;
+
+                const current = settings.get_value('custom-aliases').deepUnpack() || {};
+                current[appName] = target;
+                settings.set_value('custom-aliases', new GLib.Variant('a{ss}', current));
+
+                const appsDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'applications']);
+                const fullPath = GLib.build_filenamev([appsDir, desktopFile]);
+                await matcher.processDesktopFile(fullPath);
+                updateDesktopDatabase();
+
+                window.add_toast(new Adw.Toast({ title: _(`Applied icon "${target}" to ${appName}`) }));
+                refreshAppLists();
+                refreshAliases();
+            });
+
+            dialog.present(window);
+        };
+
+        const refreshAppLists = async () => {
             stateManager.load();
             const entries = stateManager.getAllEntries();
 
-            // Clear previously added matched expander child rows
-            for (const row of matchedChildRows) {
-                matchedExpander.remove(row);
-            }
+            for (const row of matchedChildRows) matchedExpander.remove(row);
             matchedChildRows = [];
 
-            matchedExpander.set_subtitle(_(`${entries.length} launcher(s) modified`));
+            matchedExpander.set_subtitle(_(`${entries.length} themed`));
 
-            for (const entry of entries) {
+            const appsDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'applications']);
+
+            for (const item of entries) {
                 const row = new Adw.ActionRow({
-                    title: entry.appName || entry.desktopFile,
-                    subtitle: `${entry.browser || 'PWA'} • Matched: ${entry.matchedIcon} (Original: ${entry.originalIcon})`
+                    title: item.appName || item.desktopFile,
+                    subtitle: item.matchedIcon
                 });
 
-                const img = new Gtk.Image({
-                    icon_name: entry.matchedIcon,
+                const appImg = new Gtk.Image({
+                    icon_name: item.matchedIcon,
                     pixel_size: 24,
                     valign: Gtk.Align.CENTER
                 });
-                row.add_prefix(img);
+                row.add_prefix(appImg);
 
-                const restoreOneBtn = new Gtk.Button({
-                    label: _('Restore'),
+                const fullPath = GLib.build_filenamev([appsDir, item.desktopFile]);
+
+                // Symmetrical button bar
+                const btnBox = new Gtk.Box({
+                    orientation: Gtk.Orientation.HORIZONTAL,
+                    spacing: 2,
+                    valign: Gtk.Align.CENTER
+                });
+
+                const editIconBtn = new Gtk.Button({
+                    icon_name: 'document-edit-symbolic',
+                    tooltip_text: _('Change Icon Manually'),
                     valign: Gtk.Align.CENTER,
-                    css_classes: ['flat', 'destructive-action']
+                    css_classes: ['flat']
                 });
-                restoreOneBtn.connect('clicked', async () => {
-                    restoreOneBtn.set_sensitive(false);
-                    await matcher.restoreLauncher(entry.desktopFile);
-                    refreshLauncherLists();
+                editIconBtn.connect('clicked', () => {
+                    openManualIconDialog(item.appName, item.matchedIcon, item.desktopFile);
                 });
-                row.add_suffix(restoreOneBtn);
+                btnBox.append(editIconBtn);
 
+                const rematchBtn = new Gtk.Button({
+                    icon_name: 'view-refresh-symbolic',
+                    tooltip_text: _('Re-match Launcher'),
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat']
+                });
+                rematchBtn.connect('clicked', async () => {
+                    rematchBtn.set_sensitive(false);
+                    try {
+                        await matcher.processDesktopFile(fullPath);
+                        updateDesktopDatabase();
+                        window.add_toast(new Adw.Toast({ title: _(`Re-matched ${item.appName}`) }));
+                        refreshAppLists();
+                    } finally {
+                        rematchBtn.set_sensitive(true);
+                    }
+                });
+                btnBox.append(rematchBtn);
+
+                const revealBtn = new Gtk.Button({
+                    icon_name: 'folder-symbolic',
+                    tooltip_text: _('Reveal in Files'),
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat']
+                });
+                revealBtn.connect('clicked', () => showInFiles(fullPath));
+                btnBox.append(revealBtn);
+
+                const revertOneBtn = new Gtk.Button({
+                    icon_name: 'edit-undo-symbolic',
+                    tooltip_text: _('Revert to Original Icon'),
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat']
+                });
+                revertOneBtn.connect('clicked', async () => {
+                    await matcher.restoreLauncher(item.desktopFile);
+                    updateDesktopDatabase();
+                    window.add_toast(new Adw.Toast({ title: _(`Reverted ${item.appName}`) }));
+                    refreshAppLists();
+                });
+                btnBox.append(revertOneBtn);
+
+                row.add_suffix(btnBox);
                 matchedExpander.add_row(row);
                 matchedChildRows.push(row);
             }
 
             if (entries.length === 0) {
                 const emptyRow = new Adw.ActionRow({
-                    title: _('No modified launchers recorded'),
-                    subtitle: _('Launchers will appear here once their icons are matched')
+                    title: _('No themed launchers recorded')
                 });
+                emptyRow.add_prefix(makePrefixIcon('info-symbolic'));
                 matchedExpander.add_row(emptyRow);
                 matchedChildRows.push(emptyRow);
             }
 
-            // Clear previously added unmatched expander child rows
-            for (const row of unmatchedChildRows) {
-                unmatchedExpander.remove(row);
-            }
+            // Unmatched Scan
+            for (const row of unmatchedChildRows) unmatchedExpander.remove(row);
             unmatchedChildRows = [];
 
-            const appsDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'applications']);
             const dirFile = Gio.File.new_for_path(appsDir);
-
             const unmatched = [];
+
             if (dirFile.query_exists(null)) {
                 try {
-                    const enumerator = dirFile.enumerate_children(
-                        'standard::name',
-                        Gio.FileQueryInfoFlags.NONE,
-                        null
-                    );
+                    const enumerator = dirFile.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
                     let info;
                     while ((info = enumerator.next_file(null)) !== null) {
                         const name = info.get_name();
@@ -593,7 +623,6 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
                                 unmatched.push({
                                     filename: name,
                                     name: parsed.name,
-                                    browser: pwaInfo.browserName,
                                     icon: parsed.icon
                                 });
                             }
@@ -605,310 +634,341 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
                 }
             }
 
-            unmatchedExpander.set_subtitle(_(`${unmatched.length} launcher(s) without theme icons`));
+            unmatchedExpander.set_subtitle(_(`${unmatched.length} unresolved`));
 
             for (const item of unmatched) {
                 const row = new Adw.ActionRow({
                     title: item.name,
-                    subtitle: `${item.browser || 'PWA'} • Desktop icon: ${item.icon}`
+                    subtitle: item.filename
                 });
+                row.add_prefix(makePrefixIcon('dialog-warning-symbolic'));
 
-                const warnImg = new Gtk.Image({
-                    icon_name: 'dialog-warning-symbolic',
-                    pixel_size: 24,
+                const fullPath = GLib.build_filenamev([appsDir, item.filename]);
+
+                const btnBox = new Gtk.Box({
+                    orientation: Gtk.Orientation.HORIZONTAL,
+                    spacing: 4,
                     valign: Gtk.Align.CENTER
                 });
-                row.add_prefix(warnImg);
 
-                const addAliasBtn = new Gtk.Button({
-                    label: _('Add Alias'),
+                const revealBtn = new Gtk.Button({
+                    icon_name: 'folder-symbolic',
+                    tooltip_text: _('Reveal in Files'),
                     valign: Gtk.Align.CENTER,
                     css_classes: ['flat']
                 });
-                addAliasBtn.connect('clicked', () => {
-                    openAddAliasDialog(item.name);
-                });
-                row.add_suffix(addAliasBtn);
+                revealBtn.connect('clicked', () => showInFiles(fullPath));
+                btnBox.append(revealBtn);
 
+                const addAliasBtn = new Gtk.Button({
+                    label: _('Set Icon'),
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat']
+                });
+                addAliasBtn.connect('clicked', () => openManualIconDialog(item.name, '', item.filename));
+                btnBox.append(addAliasBtn);
+
+                row.add_suffix(btnBox);
                 unmatchedExpander.add_row(row);
                 unmatchedChildRows.push(row);
             }
 
             if (unmatched.length === 0) {
                 const emptyRow = new Adw.ActionRow({
-                    title: _('No unmatched PWA launchers found'),
-                    subtitle: _('All detected PWAs have theme icons or no PWAs are installed')
+                    title: _('All PWAs have matching icons')
                 });
+                emptyRow.add_prefix(makePrefixIcon('info-symbolic'));
                 unmatchedExpander.add_row(emptyRow);
                 unmatchedChildRows.push(emptyRow);
             }
         };
 
-        refreshLauncherLists();
-
-        scanBtn.connect('clicked', async () => {
-            scanBtn.set_sensitive(false);
-            scanRow.set_subtitle(_('Scanning applications directory...'));
-
-            const appsDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'applications']);
-            const dirFile = Gio.File.new_for_path(appsDir);
-            let updated = 0;
-
-            if (dirFile.query_exists(null)) {
-                try {
-                    const enumerator = dirFile.enumerate_children(
-                        'standard::name',
-                        Gio.FileQueryInfoFlags.NONE,
-                        null
-                    );
-                    let info;
-                    while ((info = enumerator.next_file(null)) !== null) {
-                        const name = info.get_name();
-                        if (!name.endsWith('.desktop')) continue;
-                        const fullPath = GLib.build_filenamev([appsDir, name]);
-                        const res = await matcher.processDesktopFile(fullPath);
-                        if (res && res.modified) updated++;
-                    }
-                    enumerator.close(null);
-                } catch (e) {
-                    logger.error('Manual scan error', e);
-                }
-            }
-
-            scanRow.set_subtitle(_(`Scan complete: ${updated} launcher(s) updated`));
-            scanBtn.set_sensitive(true);
-            refreshLauncherLists();
-        });
-
-        restoreBtn.connect('clicked', () => {
-            const dialog = new Adw.AlertDialog({
-                heading: _('Restore All Original Icons?'),
-                body: _('This will safely restore all modified PWA desktop launchers to their original browser-installed icon paths.')
-            });
-            dialog.add_response('cancel', _('Cancel'));
-            dialog.add_response('restore', _('Restore All'));
-            dialog.set_response_appearance('restore', Adw.ResponseAppearance.DESTRUCTIVE);
-
-            dialog.connect('response', async (dlg, response) => {
-                if (response === 'restore') {
-                    restoreBtn.set_sensitive(false);
-                    const { restoredCount } = await matcher.restoreAll();
-                    restoreRow.set_subtitle(_(`Restored ${restoredCount} launcher(s)`));
-                    restoreBtn.set_sensitive(true);
-                    refreshLauncherLists();
-                }
-            });
-
-            dialog.present(window);
-        });
-
-        // Section D4: State and Backup Group
-        const stateGroup = new Adw.PreferencesGroup({
-            title: _('State & Portability'),
-            description: _('Manage persisted modification state or export/import custom aliases')
-        });
-        maintenancePage.add(stateGroup);
-
-        // Export custom aliases
-        const exportRow = new Adw.ActionRow({
-            title: _('Export Custom Aliases'),
-            subtitle: _('Save your custom icon aliases to a JSON file')
-        });
-        const exportBtn = new Gtk.Button({
-            label: _('Export'),
-            valign: Gtk.Align.CENTER
-        });
-        exportRow.add_suffix(exportBtn);
-        stateGroup.add(exportRow);
-
-        exportBtn.connect('clicked', async () => {
-            try {
-                const varVal = settings.get_value('custom-aliases');
-                const aliases = varVal.deepUnpack ? varVal.deepUnpack() : {};
-                const jsonStr = JSON.stringify(aliases, null, 2);
-
-                if (Gtk.FileDialog) {
-                    const dialog = new Gtk.FileDialog({
-                        title: _('Export Custom Aliases'),
-                        initial_name: 'pwa-icon-aliases.json'
-                    });
-                    dialog.save(window, null, (dlg, res) => {
-                        try {
-                            const file = dlg.save_finish(res);
-                            if (file) {
-                                file.replace_contents(
-                                    new TextEncoder().encode(jsonStr),
-                                    null,
-                                    false,
-                                    Gio.FileCreateFlags.REPLACE_DESTINATION,
-                                    null
-                                );
-                                exportRow.set_subtitle(_(`Exported successfully to ${file.get_basename()}`));
-                            }
-                        } catch (e) {
-                            // Cancelled by user
-                        }
-                    });
-                }
-            } catch (err) {
-                logger.error('Failed to export custom aliases', err);
-            }
-        });
-
-        // Import custom aliases
-        const importRow = new Adw.ActionRow({
-            title: _('Import Custom Aliases'),
-            subtitle: _('Load custom icon aliases from a JSON file')
-        });
-        const importBtn = new Gtk.Button({
-            label: _('Import'),
-            valign: Gtk.Align.CENTER
-        });
-        importRow.add_suffix(importBtn);
-        stateGroup.add(importRow);
-
-        importBtn.connect('clicked', () => {
-            try {
-                if (Gtk.FileDialog) {
-                    const dialog = new Gtk.FileDialog({
-                        title: _('Import Custom Aliases')
-                    });
-                    dialog.open(window, null, (dlg, res) => {
-                        try {
-                            const file = dlg.open_finish(res);
-                            if (file) {
-                                const [ok, bytes] = file.load_contents(null);
-                                if (ok && bytes) {
-                                    const json = JSON.parse(new TextDecoder('utf-8').decode(bytes));
-                                    if (json && typeof json === 'object' && !Array.isArray(json)) {
-                                        const currentVar = settings.get_value('custom-aliases');
-                                        const curr = currentVar.deepUnpack ? currentVar.deepUnpack() : {};
-                                        let count = 0;
-                                        for (const [k, v] of Object.entries(json)) {
-                                            if (typeof k === 'string' && typeof v === 'string') {
-                                                curr[k] = v;
-                                                count++;
-                                            }
-                                        }
-                                        settings.set_value('custom-aliases', new GLib.Variant('a{ss}', curr));
-                                        refreshAliases();
-                                        importRow.set_subtitle(_(`Successfully imported ${count} alias(es)`));
-                                    }
-                                }
-                            }
-                        } catch (e) {
-                            // Cancelled by user
-                        }
-                    });
-                }
-            } catch (err) {
-                logger.error('Failed to import custom aliases', err);
-            }
-        });
-
-        const clearStateRow = new Adw.ActionRow({
-            title: _('Clear Extension State'),
-            subtitle: _('Deletes recorded original icon metadata without altering desktop files')
-        });
-        const clearStateBtn = new Gtk.Button({
-            label: _('Clear State'),
-            valign: Gtk.Align.CENTER,
-            css_classes: ['destructive-action', 'flat']
-        });
-        clearStateRow.add_suffix(clearStateBtn);
-        stateGroup.add(clearStateRow);
-
-        clearStateBtn.connect('clicked', () => {
-            const dialog = new Adw.AlertDialog({
-                heading: _('Clear Extension State?'),
-                body: _('This clears the restoration database. Launchers will not be reverted and their original icon paths will no longer be stored.')
-            });
-            dialog.add_response('cancel', _('Cancel'));
-            dialog.add_response('clear', _('Clear'));
-            dialog.set_response_appearance('clear', Adw.ResponseAppearance.DESTRUCTIVE);
-
-            dialog.connect('response', (dlg, response) => {
-                if (response === 'clear') {
-                    stateManager.clearState();
-                    clearStateRow.set_subtitle(_('Extension state cleared'));
-                    refreshLauncherLists();
-                }
-            });
-
-            dialog.present(window);
-        });
+        refreshAppLists();
 
         // ==========================================
-        // PAGE 4: DIAGNOSTICS
+        // PAGE 2: CUSTOMIZATION
         // ==========================================
-        const diagPage = new Adw.PreferencesPage({
-            title: _('Diagnostics'),
-            icon_name: 'utilities-terminal-symbolic'
+        const customPage = new Adw.PreferencesPage({
+            title: _('Customization'),
+            icon_name: 'emblem-favorite-symbolic'
         });
-        window.add(diagPage);
+        window.add(customPage);
 
-        const diagGroup = new Adw.PreferencesGroup({
-            title: _('Diagnostic Logging'),
-            description: _('View lightweight diagnostic events to verify matching and troubleshooting')
+        // Group 1: Live Tester
+        const previewGroup = new Adw.PreferencesGroup({
+            title: _('Icon Tester')
         });
-        diagPage.add(diagGroup);
+        customPage.add(previewGroup);
 
-        const debugSwitch = new Adw.SwitchRow({
-            title: _('Debug Logging'),
-            subtitle: _('Enable detailed matching logs in journal and below')
+        const testEntryRow = new Adw.EntryRow({
+            title: _('App Name')
         });
-        settings.bind('debug-logging', debugSwitch, 'active', Gio.SettingsBindFlags.DEFAULT);
-        diagGroup.add(debugSwitch);
+        testEntryRow.add_prefix(makePrefixIcon('edit-find-symbolic'));
+        previewGroup.add(testEntryRow);
 
-        const logActionsRow = new Adw.ActionRow({
-            title: _('Recent Activity Log'),
-            subtitle: _('View recent matching and detection events')
+        const previewResultRow = new Adw.ActionRow({
+            title: _('Result')
         });
-        const refreshLogsBtn = new Gtk.Button({
-            label: _('Refresh'),
+        const previewImage = new Gtk.Image({
+            icon_name: 'image-missing-symbolic',
+            pixel_size: 24,
             valign: Gtk.Align.CENTER
         });
-        const clearLogsBtn = new Gtk.Button({
-            label: _('Clear'),
+        previewResultRow.add_prefix(previewImage);
+
+        const saveAsAliasBtn = new Gtk.Button({
+            label: _('Save Alias'),
             valign: Gtk.Align.CENTER,
-            css_classes: ['flat']
+            sensitive: false,
+            css_classes: ['suggested-action', 'flat']
         });
-        logActionsRow.add_suffix(refreshLogsBtn);
-        logActionsRow.add_suffix(clearLogsBtn);
-        diagGroup.add(logActionsRow);
+        previewResultRow.add_suffix(saveAsAliasBtn);
+        previewGroup.add(previewResultRow);
 
-        const logTextView = new Gtk.TextView({
-            editable: false,
-            monospace: true,
-            wrap_mode: Gtk.WrapMode.WORD_CHAR,
-            top_margin: 8,
-            bottom_margin: 8,
-            left_margin: 8,
-            right_margin: 8
+        let lastResolvedIcon = '';
+        let lastQueryName = '';
+
+        testEntryRow.connect('changed', () => {
+            const query = testEntryRow.get_text().trim();
+            lastQueryName = query;
+            if (!query) {
+                previewResultRow.set_subtitle('');
+                previewImage.set_from_icon_name('image-missing-symbolic');
+                saveAsAliasBtn.set_sensitive(false);
+                lastResolvedIcon = '';
+                return;
+            }
+
+            resolver.resolveIcon(query, '').then(res => {
+                if (res) {
+                    lastResolvedIcon = res;
+                    previewResultRow.set_subtitle(res);
+                    previewImage.set_from_icon_name(res);
+                    saveAsAliasBtn.set_sensitive(true);
+                } else {
+                    lastResolvedIcon = '';
+                    previewResultRow.set_subtitle(_('Not found'));
+                    previewImage.set_from_icon_name('image-missing-symbolic');
+                    saveAsAliasBtn.set_sensitive(false);
+                }
+            });
         });
 
-        const logScrolled = new Gtk.ScrolledWindow({
-            min_content_height: 240,
-            child: logTextView
+        saveAsAliasBtn.connect('clicked', () => {
+            if (!lastQueryName || !lastResolvedIcon) return;
+            const current = settings.get_value('custom-aliases').deepUnpack() || {};
+            current[lastQueryName] = lastResolvedIcon;
+            settings.set_value('custom-aliases', new GLib.Variant('a{ss}', current));
+            refreshAliases();
+            window.add_toast(new Adw.Toast({ title: _(`Saved alias for ${lastQueryName}`) }));
+            saveAsAliasBtn.set_sensitive(false);
         });
-        diagGroup.add(logScrolled);
 
-        const updateLogDisplay = () => {
-            const logs = logger.getRecentLogs();
-            const buffer = logTextView.get_buffer();
-            if (logs.length === 0) {
-                buffer.set_text(_('No log entries recorded yet.'), -1);
-            } else {
-                buffer.set_text(logs.join('\n'), -1);
+        // Group 2: Custom Aliases (Native Boxed List)
+        const aliasesGroup = new Adw.PreferencesGroup({
+            title: _('Custom Aliases')
+        });
+        customPage.add(aliasesGroup);
+
+        const addAliasActionRow = new Adw.ActionRow({
+            title: _('Add New Alias')
+        });
+        addAliasActionRow.add_prefix(makePrefixIcon('list-add-symbolic'));
+        const addAliasBtn = new Gtk.Button({
+            label: _('Add'),
+            valign: Gtk.Align.CENTER,
+            css_classes: ['suggested-action']
+        });
+        addAliasActionRow.add_suffix(addAliasBtn);
+        aliasesGroup.add(addAliasActionRow);
+
+        let aliasChildRows = [];
+
+        const refreshAliases = () => {
+            for (const r of aliasChildRows) aliasesGroup.remove(r);
+            aliasChildRows = [];
+
+            const rawVal = settings.get_value('custom-aliases');
+            const aliases = rawVal.deepUnpack ? rawVal.deepUnpack() : {};
+            const keys = Object.keys(aliases);
+
+            if (keys.length === 0) {
+                const emptyRow = new Adw.ActionRow({
+                    title: _('No custom aliases defined')
+                });
+                emptyRow.add_prefix(makePrefixIcon('info-symbolic'));
+                aliasesGroup.add(emptyRow);
+                aliasChildRows.push(emptyRow);
+                return;
+            }
+
+            for (const key of keys) {
+                const targetIcon = aliases[key];
+                const row = new Adw.ActionRow({
+                    title: key,
+                    subtitle: targetIcon
+                });
+
+                const img = new Gtk.Image({
+                    icon_name: targetIcon,
+                    pixel_size: 24,
+                    valign: Gtk.Align.CENTER
+                });
+                row.add_prefix(img);
+
+                const delBtn = new Gtk.Button({
+                    icon_name: 'user-trash-symbolic',
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat', 'destructive-action']
+                });
+                delBtn.connect('clicked', () => {
+                    delete aliases[key];
+                    settings.set_value('custom-aliases', new GLib.Variant('a{ss}', aliases));
+                    refreshAliases();
+                });
+                row.add_suffix(delBtn);
+
+                aliasesGroup.add(row);
+                aliasChildRows.push(row);
             }
         };
 
-        refreshLogsBtn.connect('clicked', updateLogDisplay);
-        clearLogsBtn.connect('clicked', () => {
-            logger.clearLogs();
-            updateLogDisplay();
+        const openAddAliasDialog = (defaultAppName = '') => {
+            const dialog = new Adw.AlertDialog({
+                heading: _('Add Custom Alias')
+            });
+
+            const box = new Gtk.Box({
+                orientation: Gtk.Orientation.VERTICAL,
+                spacing: 12,
+                margin_top: 12,
+                margin_bottom: 12
+            });
+
+            const appEntry = new Adw.EntryRow({
+                title: _('App Name'),
+                text: defaultAppName
+            });
+            box.append(appEntry);
+
+            const iconEntry = new Adw.EntryRow({
+                title: _('Icon Name')
+            });
+            box.append(iconEntry);
+
+            dialog.set_extra_child(box);
+            dialog.add_response('cancel', _('Cancel'));
+            dialog.add_response('save', _('Save'));
+            dialog.set_response_appearance('save', Adw.ResponseAppearance.SUGGESTED);
+            dialog.set_default_response('save');
+
+            dialog.connect('response::save', () => {
+                const app = appEntry.get_text().trim();
+                const icon = iconEntry.get_text().trim();
+                if (!app || !icon) return;
+
+                const current = settings.get_value('custom-aliases').deepUnpack() || {};
+                current[app] = icon;
+                settings.set_value('custom-aliases', new GLib.Variant('a{ss}', current));
+                refreshAliases();
+                window.add_toast(new Adw.Toast({ title: _(`Added alias for ${app}`) }));
+            });
+
+            dialog.present(window);
+        };
+
+        addAliasBtn.connect('clicked', () => openAddAliasDialog());
+        refreshAliases();
+
+        // Group 3: Exclusions (Native Boxed List)
+        const exclusionsGroup = new Adw.PreferencesGroup({
+            title: _('Exclusions')
+        });
+        customPage.add(exclusionsGroup);
+
+        const addExclusionActionRow = new Adw.ActionRow({
+            title: _('Add Exclusion')
+        });
+        addExclusionActionRow.add_prefix(makePrefixIcon('list-add-symbolic'));
+        const addExclusionBtn = new Gtk.Button({
+            label: _('Add'),
+            valign: Gtk.Align.CENTER,
+            css_classes: ['suggested-action']
+        });
+        addExclusionActionRow.add_suffix(addExclusionBtn);
+        exclusionsGroup.add(addExclusionActionRow);
+
+        let exclusionChildRows = [];
+
+        const refreshExclusions = () => {
+            for (const r of exclusionChildRows) exclusionsGroup.remove(r);
+            exclusionChildRows = [];
+
+            const exclusions = settings.get_strv('excluded-apps') || [];
+            if (exclusions.length === 0) {
+                const emptyRow = new Adw.ActionRow({
+                    title: _('No applications excluded')
+                });
+                emptyRow.add_prefix(makePrefixIcon('info-symbolic'));
+                exclusionsGroup.add(emptyRow);
+                exclusionChildRows.push(emptyRow);
+                return;
+            }
+
+            for (const item of exclusions) {
+                const row = new Adw.ActionRow({
+                    title: item
+                });
+                row.add_prefix(makePrefixIcon('dialog-error-symbolic'));
+
+                const delBtn = new Gtk.Button({
+                    icon_name: 'user-trash-symbolic',
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat', 'destructive-action']
+                });
+                delBtn.connect('clicked', () => {
+                    const current = settings.get_strv('excluded-apps') || [];
+                    const updated = current.filter(x => x !== item);
+                    settings.set_strv('excluded-apps', updated);
+                    refreshExclusions();
+                    window.add_toast(new Adw.Toast({ title: _(`Removed exclusion ${item}`) }));
+                });
+                row.add_suffix(delBtn);
+
+                exclusionsGroup.add(row);
+                exclusionChildRows.push(row);
+            }
+        };
+
+        addExclusionBtn.connect('clicked', () => {
+            const dialog = new Adw.AlertDialog({
+                heading: _('Add Exclusion')
+            });
+
+            const box = new Gtk.Box({ margin_top: 12, margin_bottom: 12 });
+            const entry = new Adw.EntryRow({ title: _('App Name or .desktop filename') });
+            box.append(entry);
+            dialog.set_extra_child(box);
+
+            dialog.add_response('cancel', _('Cancel'));
+            dialog.add_response('add', _('Add'));
+            dialog.set_response_appearance('add', Adw.ResponseAppearance.SUGGESTED);
+
+            dialog.connect('response::add', () => {
+                const val = entry.get_text().trim();
+                if (!val) return;
+                const current = settings.get_strv('excluded-apps') || [];
+                if (!current.includes(val)) {
+                    current.push(val);
+                    settings.set_strv('excluded-apps', current);
+                    refreshExclusions();
+                    window.add_toast(new Adw.Toast({ title: _(`Excluded ${val}`) }));
+                }
+            });
+
+            dialog.present(window);
         });
 
-        updateLogDisplay();
+        refreshExclusions();
     }
 }
