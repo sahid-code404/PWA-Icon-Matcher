@@ -561,6 +561,88 @@ Icon=/orig/youtube.png
             cleanupDir(tmpState);
         }
     }
+
+    // =========================================================================
+    // Test 13: Rename synchronization in directory monitor (Section 7)
+    // =========================================================================
+    console.log('\n[Test 13] Rename synchronization in directory monitor');
+    {
+        const tmpApps = GLib.dir_make_tmp('pwa-test13-XXXXXX');
+        const tmpState = GLib.dir_make_tmp('pwa-state13-XXXXXX');
+        try {
+            const stateMgr = new StateManager(tmpState);
+            const matcher = new IconMatcher({
+                resolver: new IconResolver(mockTheme),
+                stateManager: stateMgr,
+                fileWriter: new FileWriter([tmpApps]),
+                applicationsDir: tmpApps
+            });
+
+            const monitor = new ApplicationFileMonitor(matcher, { applicationsDir: tmpApps });
+            await monitor.start(false);
+
+            // Record initial state entry
+            stateMgr.recordModification('brave-old.desktop', '/orig/path.png', 'claude', 'Claude', 'Brave');
+            assert.ok(stateMgr.hasEntry('brave-old.desktop'), 'State record exists before rename');
+
+            // Simulate file rename event through monitor handler
+            const oldFile = Gio.File.new_for_path(GLib.build_filenamev([tmpApps, 'brave-old.desktop']));
+            const newFile = Gio.File.new_for_path(GLib.build_filenamev([tmpApps, 'brave-new.desktop']));
+            monitor._onFileChanged(oldFile, newFile, Gio.FileMonitorEvent.RENAMED);
+
+            assert.ok(!stateMgr.hasEntry('brave-old.desktop'), 'Old state record removed after rename event');
+            assert.ok(stateMgr.hasEntry('brave-new.desktop'), 'State record migrated to new filename');
+            assert.equal(stateMgr.getEntry('brave-new.desktop').originalIcon, '/orig/path.png', 'Original icon preserved in migrated record');
+
+            monitor.stop();
+        } finally {
+            cleanupDir(tmpApps);
+            cleanupDir(tmpState);
+        }
+    }
+
+    // =========================================================================
+    // Test 14: Valid user-selected custom icon preservation (Section 5.4)
+    // =========================================================================
+    console.log('\n[Test 14] Valid user-selected custom icon preservation');
+    {
+        const tmpApps = GLib.dir_make_tmp('pwa-test14-XXXXXX');
+        const tmpState = GLib.dir_make_tmp('pwa-state14-XXXXXX');
+        try {
+            const customFilePath = GLib.build_filenamev([tmpApps, 'brave-custom-Default.desktop']);
+            const customContent = `[Desktop Entry]
+Type=Application
+Name=Claude
+Exec=/usr/bin/brave-browser --app-id=claude123
+Icon=my-favorite-custom-icon
+`;
+            Gio.File.new_for_path(customFilePath).replace_contents(
+                new TextEncoder().encode(customContent),
+                null,
+                false,
+                Gio.FileCreateFlags.NONE,
+                null
+            );
+
+            const matcher = new IconMatcher({
+                resolver: new IconResolver(mockTheme),
+                stateManager: new StateManager(tmpState),
+                fileWriter: new FileWriter([tmpApps]),
+                applicationsDir: tmpApps
+            });
+
+            const res = await matcher.processDesktopFile(customFilePath);
+            assert.ok(!res.modified, 'File with valid user-selected icon is NOT modified');
+            assert.equal(res.reason, 'custom-icon-preserved', 'Reason correctly reports custom-icon-preserved');
+
+            const [ok, bytes] = Gio.File.new_for_path(customFilePath).load_contents(null);
+            const content = new TextDecoder('utf-8').decode(bytes);
+            assert.ok(content.includes('Icon=my-favorite-custom-icon'), 'Custom icon preserved intact');
+        } finally {
+            cleanupDir(tmpApps);
+            cleanupDir(tmpState);
+        }
+    }
 }
 
 function cleanupDir(dirPath) {

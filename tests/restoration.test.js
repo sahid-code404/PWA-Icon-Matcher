@@ -102,6 +102,30 @@ export async function runRestorationTests(assert) {
             const [checkOk, checkBytes] = testFile.load_contents(null);
             const checkContent = new TextDecoder('utf-8').decode(checkBytes);
             assert.ok(checkContent.includes('Icon=user-custom-icon'), 'User-modified icon left completely untouched');
+
+            // 6. StateManager renameEntry synchronization test (Section 7)
+            stateMgr.recordModification('old-launcher.desktop', '/orig/old.png', 'old-icon', 'App');
+            assert.ok(stateMgr.hasEntry('old-launcher.desktop'), 'Old launcher entry exists');
+            const renameOk = stateMgr.renameEntry('old-launcher.desktop', 'renamed-launcher.desktop');
+            assert.ok(renameOk, 'renameEntry succeeds');
+            assert.ok(!stateMgr.hasEntry('old-launcher.desktop'), 'Old entry removed');
+            const renamedEntry = stateMgr.getEntry('renamed-launcher.desktop');
+            assert.ok(renamedEntry, 'Renamed entry exists');
+            assert.equal(renamedEntry.originalIcon, '/orig/old.png', 'Original icon preserved across rename');
+
+            // 7. Security: Reject symlink pointing outside allowed directories
+            const symlinkPath = GLib.build_filenamev([appsTmpDir, 'symlink-attack.desktop']);
+            try {
+                GLib.file_set_contents('/tmp/pwa-symlink-target.desktop', '[Desktop Entry]\nName=Target\n');
+                const symFile = Gio.File.new_for_path(symlinkPath);
+                symFile.make_symbolic_link('/tmp/pwa-symlink-target.desktop', null);
+                assert.ok(!fileWriter.isPathAllowed(symlinkPath), 'Symlink targeting outside directory is rejected');
+            } finally {
+                const symFile = Gio.File.new_for_path(symlinkPath);
+                if (symFile.query_exists(null)) symFile.delete(null);
+                const targetFile = Gio.File.new_for_path('/tmp/pwa-symlink-target.desktop');
+                if (targetFile.query_exists(null)) targetFile.delete(null);
+            }
         } finally {
             // Cleanup appsTmpDir
             const dir = Gio.File.new_for_path(appsTmpDir);

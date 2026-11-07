@@ -164,21 +164,40 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
         previewResultRow.add_suffix(previewImage);
         previewGroup.add(previewResultRow);
 
+        let lastResolvedIcon = '';
+        let lastQueryName = '';
+
+        const saveAsAliasBtn = new Gtk.Button({
+            label: _('Save as Alias'),
+            valign: Gtk.Align.CENTER,
+            sensitive: false,
+            css_classes: ['suggested-action', 'flat']
+        });
+        previewResultRow.add_suffix(saveAsAliasBtn);
+
         testEntryRow.connect('changed', () => {
             const query = testEntryRow.get_text().trim();
+            lastQueryName = query;
             if (!query) {
                 previewResultRow.set_subtitle(_('Type a name above to test resolution'));
                 previewImage.set_from_icon_name('image-missing-symbolic');
+                saveAsAliasBtn.set_sensitive(false);
+                lastResolvedIcon = '';
                 return;
             }
 
             resolver.resolveIcon(query).then(resolved => {
+                if (testEntryRow.get_text().trim() !== query) return;
                 if (resolved) {
+                    lastResolvedIcon = resolved;
                     previewResultRow.set_subtitle(_(`Found in active theme: "${resolved}"`));
                     previewImage.set_from_icon_name(resolved);
+                    saveAsAliasBtn.set_sensitive(true);
                 } else {
+                    lastResolvedIcon = '';
                     previewResultRow.set_subtitle(_('No matching icon found in active theme'));
                     previewImage.set_from_icon_name('dialog-warning-symbolic');
+                    saveAsAliasBtn.set_sensitive(false);
                 }
             });
         });
@@ -265,7 +284,7 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
 
         refreshAliases();
 
-        addAliasBtn.connect('clicked', () => {
+        const openAddAliasDialog = (initialApp = '', initialIcon = '') => {
             const dialog = new Adw.AlertDialog({
                 heading: _('Add Custom Icon Alias'),
                 body: _('Specify the exact application name and the desired theme icon name:')
@@ -279,6 +298,9 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
 
             const appEntry = new Adw.EntryRow({ title: _('Application Name (e.g. Claude)') });
             const iconEntry = new Adw.EntryRow({ title: _('Theme Icon Name (e.g. claude)') });
+            if (initialApp) appEntry.set_text(initialApp);
+            if (initialIcon) iconEntry.set_text(initialIcon);
+
             box.append(appEntry);
             box.append(iconEntry);
 
@@ -302,6 +324,16 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
             });
 
             dialog.present(window);
+        };
+
+        addAliasBtn.connect('clicked', () => {
+            openAddAliasDialog();
+        });
+
+        saveAsAliasBtn.connect('clicked', () => {
+            if (lastQueryName && lastResolvedIcon) {
+                openAddAliasDialog(lastQueryName, lastResolvedIcon);
+            }
         });
 
         // Section C4: User Exclusions Group
@@ -469,15 +501,64 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
         });
         unmatchedGroup.add(unmatchedExpander);
 
+        let matchedChildRows = [];
+        let unmatchedChildRows = [];
+
         const refreshLauncherLists = async () => {
             stateManager.load();
             const entries = stateManager.getAllEntries();
 
-            // Clear matched expander rows
-            let child = matchedExpander.get_first_child();
-            // Note: AdwExpanderRow contains internal widgets; remove dynamically added ActionRows
-            // We can replace rows inside
+            // Clear previously added matched expander child rows
+            for (const row of matchedChildRows) {
+                matchedExpander.remove(row);
+            }
+            matchedChildRows = [];
+
             matchedExpander.set_subtitle(_(`${entries.length} launcher(s) modified`));
+
+            for (const entry of entries) {
+                const row = new Adw.ActionRow({
+                    title: entry.appName || entry.desktopFile,
+                    subtitle: `${entry.browser || 'PWA'} • Matched: ${entry.matchedIcon} (Original: ${entry.originalIcon})`
+                });
+
+                const img = new Gtk.Image({
+                    icon_name: entry.matchedIcon,
+                    pixel_size: 24,
+                    valign: Gtk.Align.CENTER
+                });
+                row.add_prefix(img);
+
+                const restoreOneBtn = new Gtk.Button({
+                    label: _('Restore'),
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat', 'destructive-action']
+                });
+                restoreOneBtn.connect('clicked', async () => {
+                    restoreOneBtn.set_sensitive(false);
+                    await matcher.restoreLauncher(entry.desktopFile);
+                    refreshLauncherLists();
+                });
+                row.add_suffix(restoreOneBtn);
+
+                matchedExpander.add_row(row);
+                matchedChildRows.push(row);
+            }
+
+            if (entries.length === 0) {
+                const emptyRow = new Adw.ActionRow({
+                    title: _('No modified launchers recorded'),
+                    subtitle: _('Launchers will appear here once their icons are matched')
+                });
+                matchedExpander.add_row(emptyRow);
+                matchedChildRows.push(emptyRow);
+            }
+
+            // Clear previously added unmatched expander child rows
+            for (const row of unmatchedChildRows) {
+                unmatchedExpander.remove(row);
+            }
+            unmatchedChildRows = [];
 
             const appsDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'applications']);
             const dirFile = Gio.File.new_for_path(appsDir);
@@ -525,6 +606,42 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
             }
 
             unmatchedExpander.set_subtitle(_(`${unmatched.length} launcher(s) without theme icons`));
+
+            for (const item of unmatched) {
+                const row = new Adw.ActionRow({
+                    title: item.name,
+                    subtitle: `${item.browser || 'PWA'} • Desktop icon: ${item.icon}`
+                });
+
+                const warnImg = new Gtk.Image({
+                    icon_name: 'dialog-warning-symbolic',
+                    pixel_size: 24,
+                    valign: Gtk.Align.CENTER
+                });
+                row.add_prefix(warnImg);
+
+                const addAliasBtn = new Gtk.Button({
+                    label: _('Add Alias'),
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat']
+                });
+                addAliasBtn.connect('clicked', () => {
+                    openAddAliasDialog(item.name);
+                });
+                row.add_suffix(addAliasBtn);
+
+                unmatchedExpander.add_row(row);
+                unmatchedChildRows.push(row);
+            }
+
+            if (unmatched.length === 0) {
+                const emptyRow = new Adw.ActionRow({
+                    title: _('No unmatched PWA launchers found'),
+                    subtitle: _('All detected PWAs have theme icons or no PWAs are installed')
+                });
+                unmatchedExpander.add_row(emptyRow);
+                unmatchedChildRows.push(emptyRow);
+            }
         };
 
         refreshLauncherLists();
@@ -591,6 +708,103 @@ export default class PwaIconMatcherPreferences extends ExtensionPreferences {
             description: _('Manage persisted modification state or export/import custom aliases')
         });
         maintenancePage.add(stateGroup);
+
+        // Export custom aliases
+        const exportRow = new Adw.ActionRow({
+            title: _('Export Custom Aliases'),
+            subtitle: _('Save your custom icon aliases to a JSON file')
+        });
+        const exportBtn = new Gtk.Button({
+            label: _('Export'),
+            valign: Gtk.Align.CENTER
+        });
+        exportRow.add_suffix(exportBtn);
+        stateGroup.add(exportRow);
+
+        exportBtn.connect('clicked', async () => {
+            try {
+                const varVal = settings.get_value('custom-aliases');
+                const aliases = varVal.deepUnpack ? varVal.deepUnpack() : {};
+                const jsonStr = JSON.stringify(aliases, null, 2);
+
+                if (Gtk.FileDialog) {
+                    const dialog = new Gtk.FileDialog({
+                        title: _('Export Custom Aliases'),
+                        initial_name: 'pwa-icon-aliases.json'
+                    });
+                    dialog.save(window, null, (dlg, res) => {
+                        try {
+                            const file = dlg.save_finish(res);
+                            if (file) {
+                                file.replace_contents(
+                                    new TextEncoder().encode(jsonStr),
+                                    null,
+                                    false,
+                                    Gio.FileCreateFlags.REPLACE_DESTINATION,
+                                    null
+                                );
+                                exportRow.set_subtitle(_(`Exported successfully to ${file.get_basename()}`));
+                            }
+                        } catch (e) {
+                            // Cancelled by user
+                        }
+                    });
+                }
+            } catch (err) {
+                logger.error('Failed to export custom aliases', err);
+            }
+        });
+
+        // Import custom aliases
+        const importRow = new Adw.ActionRow({
+            title: _('Import Custom Aliases'),
+            subtitle: _('Load custom icon aliases from a JSON file')
+        });
+        const importBtn = new Gtk.Button({
+            label: _('Import'),
+            valign: Gtk.Align.CENTER
+        });
+        importRow.add_suffix(importBtn);
+        stateGroup.add(importRow);
+
+        importBtn.connect('clicked', () => {
+            try {
+                if (Gtk.FileDialog) {
+                    const dialog = new Gtk.FileDialog({
+                        title: _('Import Custom Aliases')
+                    });
+                    dialog.open(window, null, (dlg, res) => {
+                        try {
+                            const file = dlg.open_finish(res);
+                            if (file) {
+                                const [ok, bytes] = file.load_contents(null);
+                                if (ok && bytes) {
+                                    const json = JSON.parse(new TextDecoder('utf-8').decode(bytes));
+                                    if (json && typeof json === 'object' && !Array.isArray(json)) {
+                                        const currentVar = settings.get_value('custom-aliases');
+                                        const curr = currentVar.deepUnpack ? currentVar.deepUnpack() : {};
+                                        let count = 0;
+                                        for (const [k, v] of Object.entries(json)) {
+                                            if (typeof k === 'string' && typeof v === 'string') {
+                                                curr[k] = v;
+                                                count++;
+                                            }
+                                        }
+                                        settings.set_value('custom-aliases', new GLib.Variant('a{ss}', curr));
+                                        refreshAliases();
+                                        importRow.set_subtitle(_(`Successfully imported ${count} alias(es)`));
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            // Cancelled by user
+                        }
+                    });
+                }
+            } catch (err) {
+                logger.error('Failed to import custom aliases', err);
+            }
+        });
 
         const clearStateRow = new Adw.ActionRow({
             title: _('Clear Extension State'),

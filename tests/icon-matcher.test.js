@@ -23,14 +23,20 @@ export async function runIconMatcherTests(assert) {
     assert.equal(normalizeAppName('YouTube Music'), 'youtube-music', 'YouTube Music normalizes to youtube-music');
     assert.equal(normalizeAppName('ChatGPT'), 'chatgpt', 'ChatGPT normalizes to chatgpt');
     assert.equal(normalizeAppName('Reddit'), 'reddit', 'Reddit normalizes to reddit');
+    assert.equal(normalizeAppName('Café Paris'), 'cafe-paris', 'Unicode diacritics folded cleanly');
+    assert.equal(normalizeAppName('Телеграм'), 'телеграм', 'Cyrillic application name preserved');
 
     // 2. Candidate generation and safety rule 5.2
-    const mockTheme = new MockIconTheme(['claude', 'youtube', 'whatsapp', 'spotify']);
+    const mockTheme = new MockIconTheme(['claude', 'youtube', 'whatsapp', 'spotify', 'mastodon']);
     const resolver = new IconResolver(mockTheme);
 
     const candidatesYtMusic = resolver.getCandidates('YouTube Music');
     assert.ok(candidatesYtMusic.includes('youtube-music'), 'Candidates include youtube-music');
     assert.ok(!candidatesYtMusic.includes('youtube'), 'Candidates DO NOT truncate multi-word YouTube Music to youtube');
+
+    // Priority 2: Meaningful human-readable appId checked
+    const candidatesAppId = resolver.getCandidates('Social Web', 'mastodon-instance');
+    assert.ok(candidatesAppId.includes('mastodon-instance'), 'Candidates include normalized human-readable appId');
 
     // 3. Fallback for Web suffix when exact isn't in theme
     const candidatesWa = resolver.getCandidates('WhatsApp Web');

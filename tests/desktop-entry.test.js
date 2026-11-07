@@ -54,14 +54,29 @@ Exec=/usr/bin/test --new-window
     assert.ok(patched.includes('[Desktop Action NewWindow]'), 'Action group preserved');
     assert.ok(validateDesktopEntry(patched), 'Patched content validates with KeyFile');
 
-    // 4. Preserves CRLF line endings
+    // 4. Preserves CRLF line endings and prevents newline growth
     const crlfSample = '[Desktop Entry]\r\nName=App\r\nIcon=old\r\n';
     const patchedCrlf = patchDesktopEntryIcon(crlfSample, 'new-icon');
-    assert.ok(patchedCrlf.includes('\r\n'), 'Preserves CRLF line endings');
-    assert.ok(patchedCrlf.includes('Icon=new-icon\r\n'), 'Patched line has CRLF');
+    assert.equal(patchedCrlf, '[Desktop Entry]\r\nName=App\r\nIcon=new-icon\r\n', 'Patched CRLF matches exact expected content without extra blank lines');
+
+    // Repeated patching must NOT accumulate trailing newlines
+    const patch1 = patchDesktopEntryIcon('[Desktop Entry]\nName=App\nIcon=old\n', 'new1');
+    const patch2 = patchDesktopEntryIcon(patch1, 'new2');
+    const patch3 = patchDesktopEntryIcon(patch2, 'new3');
+    assert.equal(patch3, '[Desktop Entry]\nName=App\nIcon=new3\n', 'Repeated patching does not accumulate trailing newlines');
+
+    // Files without trailing newline must preserve lack of trailing newline
+    const noTrailing = '[Desktop Entry]\nName=App\nIcon=old';
+    assert.equal(patchDesktopEntryIcon(noTrailing, 'new'), '[Desktop Entry]\nName=App\nIcon=new', 'Preserves lack of trailing newline');
 
     // 5. Appends Icon if not previously present
     const noIconSample = '[Desktop Entry]\nName=App\nExec=cmd\n';
     const patchedNoIcon = patchDesktopEntryIcon(noIconSample, 'added-icon');
     assert.ok(patchedNoIcon.includes('Icon=added-icon'), 'Icon appended when missing');
+
+    // 6. Handles duplicate Icon keys in [Desktop Entry] by replacing with a single key
+    const dupIconSample = '[Desktop Entry]\nName=App\nIcon=first\nIcon=second\nExec=cmd\n';
+    const patchedDup = patchDesktopEntryIcon(dupIconSample, 'single-icon');
+    const iconMatches = patchedDup.match(/Icon=single-icon/g);
+    assert.equal(iconMatches ? iconMatches.length : 0, 1, 'Duplicate Icon keys replaced with single key');
 }

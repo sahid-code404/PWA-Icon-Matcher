@@ -62,12 +62,24 @@ export function runPwaDetectorTests(assert) {
     assert.ok(resFf.isPwa, 'Firefox PWA recognized as PWA');
     assert.equal(resFf.browserId, 'firefox-pwa', 'Browser identified as Firefox PWA');
 
-    // 8. Non-PWA browser launcher MUST BE REJECTED
+    // 8. Flatpak Brave PWA
+    const flatpakBrave = `[Desktop Entry]
+Type=Application
+Name=Claude Flatpak
+Exec=/usr/bin/flatpak run com.brave.Browser --app-id=flatpak123
+Icon=/home/user/.local/share/icons/hicolor/256x256/apps/com.brave.Browser-flatpak123.png
+StartupWMClass=crx_flatpak123
+`;
+    const resFlatpak = detector.detect(flatpakBrave, 'com.brave.Browser-flatpak123.desktop');
+    assert.ok(resFlatpak.isPwa, 'Flatpak Brave launcher recognized as PWA');
+    assert.equal(resFlatpak.browserId, 'brave', 'Flatpak Brave identified as Brave');
+
+    // 9. Non-PWA browser launcher MUST BE REJECTED
     const regularBrowser = readFixture('brave-standard-browser.desktop');
     const resRegBrowser = detector.detect(regularBrowser, 'brave-browser.desktop');
     assert.ok(!resRegBrowser.isPwa, 'Standard Brave browser launcher is NOT considered a PWA');
 
-    // 9. Standard non-browser app MUST BE REJECTED
+    // 10. Standard non-browser app MUST BE REJECTED
     const regularApp = readFixture('regular-app.desktop');
     const resRegApp = detector.detect(regularApp, 'gimp.desktop');
     assert.ok(!resRegApp.isPwa, 'Standard desktop application (GIMP) is NOT considered a PWA');

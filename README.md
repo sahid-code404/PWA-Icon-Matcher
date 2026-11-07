@@ -261,19 +261,11 @@ To view live diagnostic logs:
 # Compile GSettings schema
 glib-compile-schemas schemas/
 
-# Build installable extension zip package
-python3 -c "
-import zipfile, os
-with zipfile.ZipFile('pwa-icon-matcher.shell-extension.zip', 'w', zipfile.ZIP_DEFLATED) as z:
-    for root, dirs, files in os.walk('.'):
-        dirs[:] = [d for d in dirs if d not in ['.git', 'tests', '__pycache__', 'fixtures'] and not d.startswith('.')]
-        for f in files:
-            if f.endswith('.zip') or f.startswith('.') or f.endswith('.test.js') or f == 'run-tests.js':
-                continue
-            rel = os.path.relpath(os.path.join(root, f), '.')
-            if not rel.startswith('tests/'):
-                z.write(rel, rel)
-"
+# Build installable extension bundle with the official GNOME utility
+gnome-extensions pack --force \
+    --extra-source=lib \
+    --schema=schemas/org.gnome.shell.extensions.pwa-icon-matcher.gschema.xml \
+    .
 ```
 
 ---
