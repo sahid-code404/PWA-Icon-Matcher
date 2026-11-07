@@ -7,6 +7,7 @@
  */
 
 import St from 'gi://St';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import { logger } from './lib/logger.js';
@@ -58,7 +59,8 @@ export default class PwaIconMatcherExtension extends Extension {
         });
 
         this._fileMonitor = new ApplicationFileMonitor(this._iconMatcher, {
-            settings: this._settings
+            settings: this._settings,
+            onLauncherUpdated: (appId) => this._refreshAppGrid(appId)
         });
 
         // Watch master enabled switch
@@ -104,5 +106,50 @@ export default class PwaIconMatcherExtension extends Extension {
         this._iconResolver = null;
         this._stateManager = null;
         this._settings = null;
+    }
+
+    _refreshAppGrid(appId = null) {
+        try {
+            const textureCache = St.TextureCache.get_default();
+            if (textureCache && typeof textureCache.rescan_icon_theme === 'function') {
+                textureCache.rescan_icon_theme();
+            }
+
+            const appDisplay = Main.overview?._overview?.controls?.appDisplay ??
+                               Main.overview?._overview?._controls?.appDisplay ??
+                               Main.overview?._overview?._controls?._appDisplay ??
+                               Main.overview?.appDisplay;
+            if (!appDisplay) return;
+
+            const refreshItem = (item) => {
+                if (!item) return;
+                if (item.icon && typeof item.icon.update === 'function') {
+                    item.icon.update();
+                }
+                if (item.view?._items) {
+                    for (const subItem of item.view._items.values()) {
+                        if (!appId || subItem.id === appId) {
+                            subItem.icon?.update?.();
+                        }
+                    }
+                }
+            };
+
+            if (appId && appDisplay._items?.has(appId)) {
+                refreshItem(appDisplay._items.get(appId));
+            } else if (appDisplay._items) {
+                for (const item of appDisplay._items.values()) {
+                    refreshItem(item);
+                }
+            }
+
+            if (appDisplay._folderIcons) {
+                for (const folder of appDisplay._folderIcons) {
+                    refreshItem(folder);
+                }
+            }
+        } catch (err) {
+            logger.debug(`Could not live-refresh App Grid icon: ${err.message}`);
+        }
     }
 }
