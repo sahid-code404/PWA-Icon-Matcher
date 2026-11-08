@@ -8,6 +8,10 @@ Automatic icon theme matching for Progressive Web Apps (PWAs) on GNOME Shell.
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Idle CPU: 0.0%](https://img.shields.io/badge/Idle%20CPU-0.0%25-brightgreen.svg)](#what-it-does)
 
+<br/>
+
+<img src="assets/comparison.png" alt="PWA Icon Matcher Difference" width="100%"/>
+
 </div>
 
 ---
@@ -22,6 +26,12 @@ Browsers hardcode low-resolution bitmap PNGs into `.desktop` files when you inst
 - **Zero Idle Resources**: 100% event-driven via `Gio.FileMonitor`. Consumes 0.0% CPU at idle.
 - **Full Desktop Sync**: Updates the Overview App Grid, Dash, Docks (Aqua Dock Pro, Dash to Dock), and Alt-Tab switcher instantly.
 - **Non-Destructive**: Stores original paths in `~/.local/state/pwa-icon-matcher/state.json`. Revert anytime with one click.
+
+<br/>
+
+<div align="center">
+  <img src="assets/overview.png" alt="GNOME Shell Overview & App Grid Prototype" width="100%"/>
+</div>
 
 ---
 
