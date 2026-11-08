@@ -4,7 +4,7 @@
 
 **Automatic icon theme matching for Progressive Web Apps on GNOME Shell.**
 
-[![GNOME Shell](https://img.shields.io/badge/GNOME%20Shell-45%20--%2051-4a90d9?logo=gnome&logoColor=white)](https://extensions.gnome.org/)
+[![GNOME Shell](https://img.shields.io/badge/GNOME%20Shell-45%20--%2051-4a90d9?logo=gnome&logoColor=white)](#supported-environments)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Architecture: Pure ESM](https://img.shields.io/badge/Architecture-Pure%20ESM-success.svg)](#architecture)
 [![Idle CPU: 0.0%](https://img.shields.io/badge/Idle%20CPU-0.0%25-brightgreen.svg)](#performance)
@@ -57,31 +57,39 @@ Because the path is hardcoded:
 
 ### Installation
 
-#### Option 1: GNOME Extensions Website (Recommended)
-Install directly from the official portal once published:
-👉 [extensions.gnome.org/extension/pwa-icon-matcher](https://extensions.gnome.org/)
+#### Option 1: Quick Install (Pre-built Zip Bundle)
 
-#### Option 2: Install from Pre-built Zip
-Download the latest `pwa-icon-matcher@pwa-icon-matcher.shell-extension.zip` release and run:
+Download the latest `pwa-icon-matcher@pwa-icon-matcher.shell-extension.zip` release from the repository and run:
+
+**`gnome-extensions install --force pwa-icon-matcher@pwa-icon-matcher.shell-extension.zip`**  
+**`gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher`**
 
 ```bash
 gnome-extensions install --force pwa-icon-matcher@pwa-icon-matcher.shell-extension.zip
 gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher
 ```
 
-#### Option 3: Manual Installation from Source
+#### Option 2: Build & Install from Source
+
+Run the following commands in your terminal:
+
+**`git clone https://github.com/sahid-code404/PWA-Icon-Matcher.git ~/.local/share/gnome-shell/extensions/pwa-icon-matcher@pwa-icon-matcher`**  
+**`cd ~/.local/share/gnome-shell/extensions/pwa-icon-matcher@pwa-icon-matcher`**  
+**`glib-compile-schemas schemas/`**  
+**`gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher`**
 
 ```bash
-# Clone directly into your extensions directory
+# 1. Clone directly into your local GNOME Shell extensions directory
 git clone https://github.com/sahid-code404/PWA-Icon-Matcher.git \
   ~/.local/share/gnome-shell/extensions/pwa-icon-matcher@pwa-icon-matcher
 
+# 2. Navigate to the extension directory
 cd ~/.local/share/gnome-shell/extensions/pwa-icon-matcher@pwa-icon-matcher
 
-# Compile GSettings schemas
+# 3. Compile GSettings schemas
 glib-compile-schemas schemas/
 
-# Enable extension
+# 4. Enable the extension
 gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher
 ```
 
@@ -92,6 +100,8 @@ gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher
 ### Preferences & Customization
 
 Open preferences via the **Extensions** app or run:
+
+**`gnome-extensions prefs pwa-icon-matcher@pwa-icon-matcher`**
 
 ```bash
 gnome-extensions prefs pwa-icon-matcher@pwa-icon-matcher
@@ -133,12 +143,16 @@ flowchart TD
 
 This project ships with a standalone, zero-dependency test suite running on native GJS:
 
+**`gjs -m tests/run-tests.js`**
+
 ```bash
 # Run all unit and integration tests
 gjs -m tests/run-tests.js
 ```
 
 Build the production extension archive:
+
+**`gnome-extensions pack --extra-source=lib --force`**
 
 ```bash
 gnome-extensions pack --extra-source=lib --force
