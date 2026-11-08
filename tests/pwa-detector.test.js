@@ -7,7 +7,8 @@ import GLib from 'gi://GLib';
 import { PwaDetector } from '../lib/pwa-detector.js';
 
 function readFixture(name) {
-    const path = GLib.build_filenamev([GLib.get_current_dir(), 'tests', 'fixtures', name]);
+    const dir = GLib.path_get_dirname(Gio.File.new_for_uri(import.meta.url).get_path());
+    const path = GLib.build_filenamev([dir, 'fixtures', name]);
     const file = Gio.File.new_for_path(path);
     const [ok, bytes] = file.load_contents(null);
     if (!ok) throw new Error(`Fixture not found: ${name}`);
