@@ -27,12 +27,6 @@ Browsers hardcode low-resolution bitmap PNGs into `.desktop` files when you inst
 - **Full Desktop Sync**: Updates the Overview App Grid, Dash, Docks (Aqua Dock Pro, Dash to Dock), and Alt-Tab switcher instantly.
 - **Non-Destructive**: Stores original paths in `~/.local/state/pwa-icon-matcher/state.json`. Revert anytime with one click.
 
-<br/>
-
-<div align="center">
-  <img src="assets/overview.png" alt="GNOME Shell Overview & App Grid Prototype" width="100%"/>
-</div>
-
 ---
 
 ### Installation
