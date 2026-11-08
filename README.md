@@ -10,7 +10,7 @@ Automatic icon theme matching for Progressive Web Apps (PWAs) on GNOME Shell.
 
 <br/>
 
-<img src="assets/comparison.png" alt="PWA Icon Matcher Difference" width="100%"/>
+<img src="assets/dock.png" alt="High Resolution Dock Icons" width="100%"/>
 
 </div>
 
