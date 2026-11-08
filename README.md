@@ -61,9 +61,6 @@ Because the path is hardcoded:
 
 Download the latest `pwa-icon-matcher@pwa-icon-matcher.shell-extension.zip` release from the repository and run:
 
-**`gnome-extensions install --force pwa-icon-matcher@pwa-icon-matcher.shell-extension.zip`**  
-**`gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher`**
-
 ```bash
 gnome-extensions install --force pwa-icon-matcher@pwa-icon-matcher.shell-extension.zip
 gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher
@@ -72,11 +69,6 @@ gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher
 #### Option 2: Build & Install from Source
 
 Run the following commands in your terminal:
-
-**`git clone https://github.com/sahid-code404/PWA-Icon-Matcher.git ~/.local/share/gnome-shell/extensions/pwa-icon-matcher@pwa-icon-matcher`**  
-**`cd ~/.local/share/gnome-shell/extensions/pwa-icon-matcher@pwa-icon-matcher`**  
-**`glib-compile-schemas schemas/`**  
-**`gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher`**
 
 ```bash
 # 1. Clone directly into your local GNOME Shell extensions directory
@@ -100,8 +92,6 @@ gnome-extensions enable pwa-icon-matcher@pwa-icon-matcher
 ### Preferences & Customization
 
 Open preferences via the **Extensions** app or run:
-
-**`gnome-extensions prefs pwa-icon-matcher@pwa-icon-matcher`**
 
 ```bash
 gnome-extensions prefs pwa-icon-matcher@pwa-icon-matcher
@@ -143,16 +133,12 @@ flowchart TD
 
 This project ships with a standalone, zero-dependency test suite running on native GJS:
 
-**`gjs -m tests/run-tests.js`**
-
 ```bash
 # Run all unit and integration tests
 gjs -m tests/run-tests.js
 ```
 
 Build the production extension archive:
-
-**`gnome-extensions pack --extra-source=lib --force`**
 
 ```bash
 gnome-extensions pack --extra-source=lib --force
