@@ -17,11 +17,11 @@ Automatic icon theme matching for Progressive Web Apps (PWAs) on GNOME Shell.
 Browsers hardcode low-resolution bitmap PNGs into `.desktop` files when you install a PWA, breaking your system icon theme.
 
 **PWA Icon Matcher** resolves this automatically:
-- 🎨 **Theme Matching**: Automatically applies matching vector icons from your active icon theme (Papirus, Adwaita, MacTahoe, etc.).
-- 🔄 **Dynamic Fallback**: Switching themes resyncs all icons in <5ms. If the new theme doesn't have an icon, it safely falls back to the native browser icon—no broken `<!>` glyphs.
-- ⚡ **Zero Idle Resources**: 100% event-driven via `Gio.FileMonitor`. Consumes 0.0% CPU at idle.
-- 🖥️ **Full Desktop Sync**: Updates the Overview App Grid, Dash, Docks (Aqua Dock Pro, Dash to Dock), and Alt-Tab switcher instantly.
-- 🛡️ **Non-Destructive**: Stores original paths in `~/.local/state/pwa-icon-matcher/state.json`. Revert anytime with one click.
+- **Theme Matching**: Automatically applies matching vector icons from your active icon theme (Papirus, Adwaita, MacTahoe, etc.).
+- **Dynamic Fallback**: Switching themes resyncs all icons in <5ms. If the new theme doesn't have an icon, it safely falls back to the native browser icon—no broken `<!>` glyphs.
+- **Zero Idle Resources**: 100% event-driven via `Gio.FileMonitor`. Consumes 0.0% CPU at idle.
+- **Full Desktop Sync**: Updates the Overview App Grid, Dash, Docks (Aqua Dock Pro, Dash to Dock), and Alt-Tab switcher instantly.
+- **Non-Destructive**: Stores original paths in `~/.local/state/pwa-icon-matcher/state.json`. Revert anytime with one click.
 
 ---
 
