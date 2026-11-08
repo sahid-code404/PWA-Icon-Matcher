@@ -10,7 +10,9 @@ Automatic icon theme matching for Progressive Web Apps (PWAs) on GNOME Shell.
 
 <br/>
 
-<img src="assets/dock.png" alt="High Resolution Dock Icons" width="100%"/>
+<img src="assets/dock-1.png" alt="Dock Icons 1" width="100%"/>
+<br/><br/>
+<img src="assets/dock-2.png" alt="Dock Icons 2" width="100%"/>
 
 </div>
 
